@@ -1,53 +1,128 @@
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Stack } from 'expo-router';
+import React, { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, Image, Alert, StyleSheet, KeyboardAvoidingView, ScrollView, Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter, Stack } from 'expo-router';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  const isValidEmail = (email: string) => {
+    const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return regex.test(email);
+  };
+
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert('تنبيه', 'يرجى ملء البريد الإلكتروني وكلمة المرور');
+      return;
+    }
+  
+    if (!isValidEmail(email)) {
+      Alert.alert('تنبيه', 'صيغة البريد الإلكتروني غير صحيحة');
+      return;
+    }
+  
+    try {
+      const response = await fetch('http://143.244.156.186:3007/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+  
+      const data = await response.json();
+  
+      if (response.ok && data.access_token) {
+        await AsyncStorage.setItem('token', data.access_token);
+  
+        // 🛡️ جلب البروفايل باستخدام التوكن
+        const profileResponse = await fetch('http://143.244.156.186:3007/users/profile', {
+          headers: { Authorization: `Bearer ${data.access_token}` },
+        });
+  
+        const profileData = await profileResponse.json();
+        console.log('📥 بيانات المستخدم:', profileData);
+  
+        if (profileResponse.ok && profileData.data && profileData.data.role) {
+          const role = profileData.data.role;
+          await AsyncStorage.setItem('role', role);
+  
+          if (role === 'USER') {
+            router.replace('/home');
+          } else if (role === 'ADMIN' || role === 'OWNER' || role === 'BRANCH_ADMIN' || role === 'CASHIER') {
+            router.replace('/admin/(tabs)/main');
+          } else {
+            Alert.alert('خطأ', 'دور المستخدم غير معروف');
+          }
+        } else {
+          console.error('❌ خطأ بجلب معلومات المستخدم:', profileData);
+          Alert.alert('خطأ', 'فشل جلب معلومات الحساب');
+        }
+      } else {
+        Alert.alert('فشل تسجيل الدخول', data.message || 'تحقق من المعلومات');
+      }
+    } catch (error) {
+      console.error('❌ خطأ أثناء تسجيل الدخول:', error);
+      Alert.alert('خطأ في الاتصال بالسيرفر');
+    }
+  };
+  
 
   return (
-    <View style={styles.container}>
-    <Stack.Screen options={{ title: '', headerBackVisible: true, headerShown: false, }} />
-      {/* صورة الشخصية */}
-      <Image
-        source={require('../../assets/images/login-icon.png')} // تأكد من وضع الصورة هنا
-        style={styles.image}
-        resizeMode="contain"
-      />
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 50 : 0}
+    >
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <Stack.Screen options={{ title: '', headerBackVisible: true, headerShown: false }} />
 
-      {/* العنوان */}
-      <Text style={styles.title}>تسجيل الدخول</Text>
+        <Image
+          source={require('../../assets/images/login-icon.png')}
+          style={styles.image}
+          resizeMode="contain"
+        />
 
-      {/* الحقول */}
-      <TextInput placeholder="البريد الإلكتروني/الهاتف" style={styles.input} />
-      <TextInput placeholder="كلمة المرور" secureTextEntry style={styles.input} />
+        <Text style={styles.title}>تسجيل الدخول</Text>
 
-      {/* زر تسجيل الدخول */}
-      <TouchableOpacity
-        style={styles.loginButton}
-        onPress={() => router.replace('/(tabs)/home')}
-      >
-        <Text style={styles.loginText}>تسجيل الدخول</Text>
-      </TouchableOpacity>
+        <TextInput
+          placeholder="البريد الإلكتروني/الهاتف"
+          autoCapitalize="none"
+          style={styles.input}
+          value={email}
+          onChangeText={setEmail}
+        />
+        <TextInput
+          placeholder="كلمة المرور"
+          secureTextEntry
+          style={styles.input}
+          value={password}
+          onChangeText={setPassword}
+        />
 
-      {/* الروابط الإضافية */}
-      <TouchableOpacity onPress={() => router.push('/auth/signup')}>
-        <Text style={styles.signupText}>ليس لديك حساب ؟</Text>
-      </TouchableOpacity>
+        <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
+          <Text style={styles.loginText}>تسجيل الدخول</Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => router.push('/auth/forgot-password')}>
-        <Text style={styles.forgotText}>نسيت معلومات الدخول؟</Text>
-      </TouchableOpacity>
-    </View>
+        <TouchableOpacity onPress={() => router.push('/auth/signup')}>
+          <Text style={styles.signupText}>ليس لديك حساب ؟</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={() => router.push('/auth/forgot-password')}>
+          <Text style={styles.forgotText}>نسيت معلومات الدخول؟</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     padding: 24,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
+    flexGrow: 1,
   },
   image: {
     width: 200,

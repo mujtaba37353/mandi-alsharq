@@ -33,10 +33,7 @@ export default function OrdersScreen() {
     <ScrollView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity>
-          <Ionicons name="arrow-back" size={24} color="#812732" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>طلبات</Text>
+        <Text style={styles.headerTitle}>الطلبات الخاصة بك</Text>
       </View>
 
       {/* Free Delivery Card */}
@@ -70,7 +67,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff', paddingHorizontal: 20 },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
     marginTop: 50,
     marginBottom: 20,

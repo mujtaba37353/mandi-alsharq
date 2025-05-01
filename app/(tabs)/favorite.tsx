@@ -1,5 +1,18 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity } from 'react-native';
+import { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Image,
+  TouchableOpacity,
+  Alert,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
+
+const BASE_URL = 'http://143.244.156.186:3007';
 
 const favorites = [
   {
@@ -25,15 +38,47 @@ const favorites = [
 ];
 
 export default function FavoriteScreen() {
+  const router = useRouter();
+  const [username, setUsername] = useState('...');
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+        if (!token) return;
+
+        const res = await fetch(`${BASE_URL}/users/profile`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+        const user = data.data;
+          setUsername(user.username);
+        } else {
+          console.log('Error fetching profile:', data.message);
+        }
+      } catch (err) {
+        console.error('Error:', err);
+      }
+    };
+
+    fetchUser();
+  }, []);
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       {/* Profile Card */}
-      <TouchableOpacity style={styles.profileCard}>
+      <TouchableOpacity
+        style={styles.profileCard}
+        onPress={() => router.push('/(tabs)/account')}
+      >
         <Image
           source={require('../../assets/images/avatar.png')}
           style={styles.avatar}
         />
-        <Text style={styles.name}>عدنان القحطاني</Text>
+        <Text style={styles.name}>{username}</Text>
         <Ionicons name="arrow-forward" size={20} color="#812732" style={styles.arrow} />
       </TouchableOpacity>
 
