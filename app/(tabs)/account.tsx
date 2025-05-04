@@ -26,10 +26,7 @@ export default function AccountScreen() {
     email: '',
     avatar: '',
   });
-  const [passwords, setPasswords] = useState({
-    currentPassword: '',
-    newPassword: '',
-  });
+  const [newPassword, setNewPassword] = useState('');
 
   const pickImage = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -50,66 +47,10 @@ export default function AccountScreen() {
     }
   };
 
-  const uploadOnlyImage = async () => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      if (!token) {
-        Alert.alert('خطأ', 'لم يتم العثور على التوكن');
-        return;
-      }
-  
-      if (!imageUri) {
-        Alert.alert('خطأ', 'يرجى اختيار صورة أولاً');
-        return;
-      }
-  
-      const formData = new FormData();
-      const filename = imageUri.split('/').pop();
-      const type = filename?.split('.').pop();
-  
-      formData.append('image', {
-        uri: imageUri,
-        name: filename,
-        type: `image/${type}`,
-      } as any);
-  
-      const uploadResponse = await fetch(`${BASE_URL}/uploads/image`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      });
-  
-      const uploadData = await uploadResponse.json();
-  
-      if (uploadResponse.ok && uploadData.url) {
-        // نحفظ فقط رابط الصورة الذي أرجعه السيرفر
-        setProfile((prev) => ({
-          ...prev,
-          avatar: uploadData.url, // فقط الـ url
-        }));
-        setImageUri(null);
-        Alert.alert('✅', 'تم رفع الصورة بنجاح');
-      } else {
-        console.error('❌ فشل رفع الصورة:', uploadData);
-        Alert.alert('خطأ', 'فشل رفع الصورة');
-      }
-    } catch (error) {
-      console.error('❌ خطأ أثناء رفع الصورة:', error);
-      Alert.alert('خطأ', 'فشل رفع الصورة، تأكد من الاتصال');
-    }
-  };
-  
-
   const fetchProfile = async () => {
     try {
       const token = await AsyncStorage.getItem('token');
-      if (!token) {
-        Alert.alert('خطأ', 'لم يتم العثور على التوكن');
-        return;
-      }
+      if (!token) return;
 
       const response = await fetch(`${BASE_URL}/users/profile`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -122,18 +63,17 @@ export default function AccountScreen() {
         setProfile({
           username: user.username || '',
           email: user.email || '',
-          avatar: user.avatar || '',
+          avatar: user.imageUrl || '',
         });
       } else {
         Alert.alert('خطأ', data.message || 'فشل جلب البيانات');
       }
     } catch (error) {
-      console.error(error);
       Alert.alert('خطأ', 'تأكد من الاتصال بالسيرفر');
     }
   };
 
-  const handleUpdateProfile = async () => {
+  const handleSaveAll = async () => {
     try {
       const token = await AsyncStorage.getItem('token');
       if (!token) {
@@ -141,15 +81,46 @@ export default function AccountScreen() {
         return;
       }
 
-      const body: any = {};
+      let imageUrl = profile.avatar;
 
-      if (profile.username.trim()) body.username = profile.username.trim();
-      if (profile.email.trim()) body.email = profile.email.trim();
-      if (profile.avatar.trim()) body.avatar = profile.avatar.trim();
+      if (imageUri) {
+        const formData = new FormData();
+        const filename = imageUri.split('/').pop();
+        const type = filename?.split('.').pop();
 
-      if (Object.keys(body).length === 0) {
-        Alert.alert('خطأ', 'يرجى تعديل حقل واحد على الأقل');
-        return;
+        formData.append('image', {
+          uri: imageUri,
+          name: filename,
+          type: `image/${type}`,
+        } as any);
+
+        const uploadResponse = await fetch(`${BASE_URL}/uploads/image`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data',
+          },
+          body: formData,
+        });
+
+        const uploadData = await uploadResponse.json();
+        if (uploadResponse.ok && uploadData.url) {
+          imageUrl = uploadData.url;
+        } else {
+          Alert.alert('خطأ', 'فشل رفع الصورة');
+          return;
+        }
+      }
+
+      const updatePayload: any = {
+        username: profile.username,
+        email: profile.email,
+        imageUrl,
+      };
+
+      // ✅ تعديل كلمة المرور
+      if (newPassword.trim()) {
+        updatePayload.password = newPassword;
       }
 
       const response = await fetch(`${BASE_URL}/users/profile`, {
@@ -158,59 +129,23 @@ export default function AccountScreen() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(updatePayload),
       });
 
-      const data = await response.json();
+      const result = await response.json();
 
       if (response.ok) {
-        Alert.alert('✅', 'تم تحديث المعلومات');
+        Alert.alert('✅', 'تم حفظ التعديلات');
+        setImageUri(null);
+        setNewPassword('');
         fetchProfile();
+        router.replace('/(tabs)/home');
       } else {
-        Alert.alert('خطأ', data.message || 'فشل التحديث');
+        Alert.alert('خطأ', result.message || 'فشل التحديث');
       }
+
     } catch (error) {
-      console.error(error);
-      Alert.alert('خطأ', 'فشل الاتصال بالسيرفر');
-    }
-  };
-
-  const handleChangePassword = async () => {
-    try {
-      if (!passwords.currentPassword || !passwords.newPassword) {
-        Alert.alert('خطأ', 'يرجى إدخال كلمة المرور الحالية والجديدة');
-        return;
-      }
-
-      const token = await AsyncStorage.getItem('token');
-      if (!token) {
-        Alert.alert('خطأ', 'لم يتم العثور على التوكن');
-        return;
-      }
-
-      const response = await fetch(`${BASE_URL}/users/change-password`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          currentPassword: passwords.currentPassword,
-          newPassword: passwords.newPassword,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        Alert.alert('✅', 'تم تغيير كلمة المرور');
-        setPasswords({ currentPassword: '', newPassword: '' });
-      } else {
-        Alert.alert('خطأ', data.message || 'فشل تغيير كلمة المرور');
-      }
-    } catch (error) {
-      console.error(error);
-      Alert.alert('خطأ', 'فشل الاتصال بالسيرفر');
+      Alert.alert('خطأ', 'حدث خطأ غير متوقع أثناء الحفظ');
     }
   };
 
@@ -219,47 +154,39 @@ export default function AccountScreen() {
     router.replace('/');
   };
 
+  const handleBack = () => {
+    router.replace('/(tabs)/home');
+  };
+
   useEffect(() => {
     fetchProfile();
   }, []);
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 20}
-    >
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* قسم الصورة */}
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 20}>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        {/* زر الرجوع */}
+        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+          <Ionicons name="arrow-back" size={24} color="#812732" />
+          <Text style={styles.backText}>رجوع</Text>
+        </TouchableOpacity>
+
         <View style={styles.profileSection}>
           <Image
             source={
               imageUri
                 ? { uri: imageUri }
                 : profile.avatar
-                ? { uri: `${BASE_URL}${profile.avatar}` } // دمج الرابط مع السيرفر
+                ? { uri: profile.avatar.startsWith('http') ? profile.avatar : `${BASE_URL}${profile.avatar}` }
                 : require('../../assets/images/avatar.png')
             }
             style={styles.avatar}
           />
-
-
           <TouchableOpacity style={styles.editIcon} onPress={pickImage}>
             <Ionicons name="camera-outline" size={20} color="#fff" />
           </TouchableOpacity>
-
-          {imageUri && (
-            <TouchableOpacity style={styles.uploadBtn} onPress={uploadOnlyImage}>
-              <Text style={{ color: '#fff', fontSize: 12 }}>رفع الصورة</Text>
-            </TouchableOpacity>
-          )}
         </View>
 
-        {/* قسم المعلومات */}
         <View style={styles.form}>
           <Text style={styles.label}>البريد الإلكتروني</Text>
           <TextInput
@@ -276,35 +203,21 @@ export default function AccountScreen() {
             onChangeText={(val) => setProfile({ ...profile, username: val })}
             textAlign="right"
           />
-        </View>
 
-        <TouchableOpacity style={styles.updateBtn} onPress={handleUpdateProfile}>
-          <Text style={styles.logoutText}>حفظ المعلومات</Text>
-        </TouchableOpacity>
-
-        {/* قسم تغيير كلمة المرور */}
-        <View style={styles.form}>
-          <Text style={styles.label}>كلمة المرور الحالية</Text>
+          <Text style={styles.label}>كلمة المرور الجديدة (اختياري)</Text>
           <TextInput
             style={styles.input}
-            value={passwords.currentPassword}
+            value={newPassword}
+            onChangeText={(val) => setNewPassword(val)}
             secureTextEntry
-            onChangeText={(val) => setPasswords({ ...passwords, currentPassword: val })}
             textAlign="right"
-          />
-
-          <Text style={styles.label}>كلمة المرور الجديدة</Text>
-          <TextInput
-            style={styles.input}
-            value={passwords.newPassword}
-            secureTextEntry
-            onChangeText={(val) => setPasswords({ ...passwords, newPassword: val })}
-            textAlign="right"
+            placeholder="اتركها فارغة إن لم ترغب بالتغيير"
+            placeholderTextColor="#aaa"
           />
         </View>
 
-        <TouchableOpacity style={styles.updateBtn} onPress={handleChangePassword}>
-          <Text style={styles.logoutText}>تغيير كلمة المرور</Text>
+        <TouchableOpacity style={styles.updateBtn} onPress={handleSaveAll}>
+          <Text style={styles.logoutText}>حفظ التعديلات</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
@@ -318,10 +231,11 @@ export default function AccountScreen() {
 const styles = StyleSheet.create({
   scroll: { backgroundColor: '#fff' },
   container: { padding: 20, paddingBottom: 100 },
-  profileSection: { alignItems: 'center', marginTop: 30, marginBottom: 20, position: 'relative' },
+  backButton: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  backText: { fontSize: 16, color: '#812732', marginLeft: 8 },
+  profileSection: { alignItems: 'center', marginTop: 10, marginBottom: 20, position: 'relative' },
   avatar: { width: 100, height: 100, borderRadius: 50, borderColor: '#ccc', borderWidth: 1 },
   editIcon: { position: 'absolute', right: 100, bottom: 0, backgroundColor: '#812732', padding: 8, borderRadius: 20 },
-  uploadBtn: { position: 'absolute', bottom: -20, backgroundColor: '#812732', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20 },
   form: { marginTop: 10 },
   label: { fontWeight: '500', color: '#812732', marginBottom: 6, marginTop: 12, textAlign: 'right' },
   input: { borderWidth: 1, borderColor: '#812732', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 10, marginBottom: 4, color: '#812732' },

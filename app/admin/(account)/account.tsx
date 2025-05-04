@@ -9,8 +9,10 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -27,9 +29,10 @@ export default function AdminAccountScreen() {
   });
 
   const pickImage = async () => {
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permissionResult.granted) {
-      alert('الرجاء السماح بالوصول للصور');
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      alert('الرجاء السماح بالوصول إلى الصور');
       return;
     }
 
@@ -37,7 +40,7 @@ export default function AdminAccountScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.5,
+      quality: 0.7,
     });
 
     if (!result.canceled && result.assets.length > 0) {
@@ -58,11 +61,17 @@ export default function AdminAccountScreen() {
 
       if (response.ok) {
         const user = data.data;
+        const fullAvatar = user.imageUrl
+          ? user.imageUrl.startsWith('http')
+            ? user.imageUrl
+            : `${BASE_URL}${user.imageUrl}`
+          : '';
+
         setProfile({
           username: user.username || '',
           email: user.email || '',
           password: '',
-          avatar: user.avatar || '',
+          avatar: fullAvatar,
         });
       } else {
         console.error('فشل جلب بيانات البروفايل', data.message);
@@ -72,10 +81,80 @@ export default function AdminAccountScreen() {
     }
   };
 
-  const handleSave = () => {
-    alert('تم حفظ التعديلات ✅');
-    router.replace('/admin/(tabs)/main');
+  const handleSave = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+  
+      let imageUrl = null;
+  
+      // رفع الصورة إذا تم اختيار واحدة
+      if (imageUri) {
+        const formData = new FormData();
+        formData.append('image', {
+          uri: imageUri,
+          name: 'avatar.jpg',
+          type: 'image/jpeg',
+        } as any);
+  
+        const uploadResponse = await fetch(`${BASE_URL}/uploads/image`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data',
+          },
+          body: formData,
+        });
+  
+        const uploadData = await uploadResponse.json();
+  
+        if (uploadResponse.ok && uploadData.url) {
+          imageUrl = uploadData.url; // فقط المسار مثل: /uploads/images/xxx.jpg
+        } else {
+          Alert.alert('خطأ', 'فشل رفع الصورة');
+          return;
+        }
+      }
+  
+      // إعداد بيانات التحديث
+      const payload: any = {
+        username: profile.username,
+        email: profile.email,
+      };
+  
+      if (profile.password.trim()) {
+        payload.password = profile.password;
+      }
+  
+      if (imageUrl) {
+        payload.imageUrl = imageUrl;
+      }
+  
+      // إرسال التحديث إلى السيرفر
+      const updateResponse = await fetch(`${BASE_URL}/users/profile`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+  
+      const result = await updateResponse.json();
+  
+      if (updateResponse.ok) {
+        Alert.alert('تم الحفظ', 'تم تحديث الحساب بنجاح ✅');
+        router.replace('/admin/(tabs)/main');
+      } else {
+        console.error('فشل التحديث', result.message);
+        Alert.alert('خطأ', result.message || 'حدث خطأ أثناء تحديث البيانات');
+      }
+    } catch (error) {
+      console.error('خطأ أثناء الحفظ', error);
+      Alert.alert('خطأ', 'حدث خطأ غير متوقع أثناء الحفظ');
+    }
   };
+  
 
   const handleLogout = async () => {
     await AsyncStorage.removeItem('token');
@@ -101,23 +180,25 @@ export default function AdminAccountScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        {/* زر الرجوع */}
         <TouchableOpacity style={styles.backButton} onPress={handleBack}>
           <Ionicons name="arrow-back" size={24} color="#812732" />
           <Text style={styles.backText}>رجوع</Text>
         </TouchableOpacity>
 
         <View style={styles.profileSection}>
-          <Image
-            source={
-              imageUri
-                ? { uri: imageUri }
-                : profile.avatar
-                ? { uri: `${BASE_URL}/${profile.avatar}` }
-                : require('../../../assets/images/avatar.png')
-            }
-            style={styles.avatar}
-          />
+            <Image
+                source={
+                  imageUri
+                    ? { uri: imageUri }
+                    : profile.avatar
+                    ? { uri: profile.avatar.startsWith('http') ? profile.avatar : `${BASE_URL}${profile.avatar}` }
+                    : require('../../../assets/images/avatar.png') // أو المسار المناسب لك للصورة الافتراضية
+                }
+                style={styles.avatar}
+                onError={(e) => {
+                  console.log('❌ فشل تحميل الصورة', e.nativeEvent.error);
+                }}
+              />
           <TouchableOpacity style={styles.editIcon} onPress={pickImage}>
             <Ionicons name="camera-outline" size={20} color="#fff" />
           </TouchableOpacity>
@@ -169,23 +250,10 @@ export default function AdminAccountScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll: {
-    backgroundColor: '#fff',
-  },
-  container: {
-    padding: 20,
-    paddingBottom: 100,
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  backText: {
-    fontSize: 16,
-    color: '#812732',
-    marginLeft: 8,
-  },
+  scroll: { backgroundColor: '#fff' },
+  container: { padding: 20, paddingBottom: 100 },
+  backButton: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  backText: { fontSize: 16, color: '#812732', marginLeft: 8 },
   profileSection: {
     alignItems: 'center',
     marginTop: 10,
@@ -207,10 +275,7 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 20,
   },
-  form: {
-    marginTop: 10,
-    flex: 1,
-  },
+  form: { marginTop: 10, flex: 1 },
   label: {
     fontWeight: '500',
     color: '#812732',

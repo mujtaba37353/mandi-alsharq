@@ -1,13 +1,59 @@
-import { View, Text, StyleSheet, ScrollView, Image, Dimensions, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, Dimensions, TouchableOpacity, Alert } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
 import { useRouter } from 'expo-router';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from 'react';
 
 const screenWidth = Dimensions.get('window').width;
+const BASE_URL = "http://143.244.156.186:3007";
+
 
 export default function AdminMainPage() {
   const router = useRouter();
   const [todayDate, setTodayDate] = useState('');
+
+  const [branches, setBranches] = useState([]);
+  const [role, setRole] = useState<string | null>(null);
+
+  const fetchBranches = async () => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) return;
+
+      const response = await fetch(`${BASE_URL}/branches`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setBranches(data);
+      } else {
+        Alert.alert("خطأ", data.message || "فشل جلب الفروع");
+      }
+    } catch (error) {
+      console.error("فشل جلب الفروع", error);
+      Alert.alert("خطأ", "حدث خطأ أثناء جلب الفروع");
+    }
+  };
+
+  const fetchRole = async () => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) return;
+      const res = await fetch(`${BASE_URL}/users/profile`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setRole(data.data.role);
+      }
+    } catch (e) {
+      console.log("خطأ جلب الدور", e);
+    }
+  };
+
 
   useEffect(() => {
     const today = new Date();
@@ -18,6 +64,8 @@ export default function AdminMainPage() {
       day: 'numeric',
     });
     setTodayDate(formatted);
+    fetchRole();
+    fetchBranches();
   }, []);
 
   const salesData = {
@@ -30,11 +78,6 @@ export default function AdminMainPage() {
     ],
   };
 
-  const branches = [
-    { id: '1', name: 'فرع الرياض', location: 'طريق الملك فهد' },
-    { id: '2', name: 'فرع جدة', location: 'حي الروضة' },
-    { id: '3', name: 'فرع الدمام', location: 'شارع الملك عبدالعزيز' },
-  ];
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
@@ -78,18 +121,27 @@ export default function AdminMainPage() {
 
       <Text style={styles.sectionTitle}>الفروع</Text>
 
-      <View style={styles.branchesContainer}>
-        {branches.map((branch) => (
-          <TouchableOpacity
-            key={branch.id}
-            style={styles.branchBox}
-            onPress={() => router.push(`/admin/branch/${branch.id}`)}
-          >
-            <Text style={styles.branchName}>{branch.name}</Text>
-            <Text style={styles.branchLocation}>{branch.location}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      {/* قائمة الفروع */}
+      <ScrollView contentContainerStyle={styles.gridContainer}>
+          {branches.map((branch) => {
+            const isClickable = role === "OWNER";
+            const Wrapper = isClickable ? TouchableOpacity : View;
+
+            return (
+              <Wrapper
+                key={branch.id}
+                style={styles.branchBoxGrid}
+                {...(isClickable && {
+                  onPress: () => router.push(`/admin/branch/${branch.id}`),
+                })}
+              >
+                <Text style={styles.branchName}>{branch.name}</Text>
+                <Text style={styles.branchDetail}>📞 {branch.phone}</Text>
+                <Text style={styles.branchDetail}>👥 {branch.users?.length || 0} مستخدم</Text>
+              </Wrapper>
+            );
+          })}
+      </ScrollView>
     </ScrollView>
   );
 }
@@ -124,33 +176,28 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     textAlign: 'right',
   },
-  branchesContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  gridContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
     gap: 10,
-    justifyContent: 'center',
-    marginTop: 10,
   },
-  branchBox: {
-    width: 160,
-    height: 100,
-    backgroundColor: '#f8f8f8',
+  branchBoxGrid: {
+    width: "31%",
+    backgroundColor: "#812732",
     borderRadius: 12,
     padding: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 3,
+    marginBottom: 15,
+    alignItems: "center",
   },
   branchName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#812732',
-    textAlign: 'center',
+    color: "#fff",
   },
-  branchLocation: {
-    fontSize: 14,
-    color: '#555',
-    marginTop: 5,
-    textAlign: 'center',
+  branchDetail: {
+    fontSize: 13,
+    color: "#fff",
+    textAlign: "center",
+    marginTop: 4,
   },
+  
 });

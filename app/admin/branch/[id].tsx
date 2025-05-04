@@ -1,33 +1,59 @@
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Alert,
+  ScrollView,
+} from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const BASE_URL = 'http://143.244.156.186:3007';
+
+const dayNames = [
+  'الأحد',
+  'الإثنين',
+  'الثلاثاء',
+  'الأربعاء',
+  'الخميس',
+  'الجمعة',
+  'السبت',
+];
 
 export default function BranchDetailsPage() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-
-  const [branchData, setBranchData] = useState<{ name: string; location: string } | null>(null);
+  const [branchData, setBranchData] = useState<any>(null);
 
   useEffect(() => {
-    const fakeBranches = {
-      '1': { name: 'فرع الرياض', location: 'طريق الملك فهد' },
-      '2': { name: 'فرع جدة', location: 'حي الروضة' },
-      '3': { name: 'فرع الدمام', location: 'شارع الملك عبدالعزيز' },
+    const fetchBranch = async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+        const response = await fetch(`${BASE_URL}/branches/${id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+          setBranchData(data);
+        } else {
+          Alert.alert('خطأ', 'فشل تحميل بيانات الفرع');
+        }
+      } catch (error) {
+        Alert.alert('خطأ', 'فشل الاتصال بالسيرفر');
+      }
     };
 
-    const branch = fakeBranches[id as string];
-    if (branch) {
-      setBranchData(branch);
-    } else {
-      setBranchData({ name: 'فرع غير معروف', location: 'غير متوفر' });
-    }
+    fetchBranch();
   }, [id]);
 
   const handleEdit = () => {
-    Alert.alert('تعديل الفرع', `ستقوم بتعديل بيانات ${branchData?.name}`);
-    // مستقبلاً توديه لصفحة تعديل الفرع
-    // router.push(`/admin/branch/edit/${id}`);
+    if (branchData) {
+      router.push(`/admin/branch/edit/${id}`);
+    }
   };
 
   const handleDelete = () => {
@@ -39,10 +65,18 @@ export default function BranchDetailsPage() {
         {
           text: 'حذف',
           style: 'destructive',
-          onPress: () => {
-            // هنا مستقبلاً تضيف مسح الفرع من السيرفر
-            Alert.alert('تم حذف الفرع بنجاح');
-            router.back();
+          onPress: async () => {
+            try {
+              const token = await AsyncStorage.getItem('token');
+              await fetch(`${BASE_URL}/branches/${id}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              Alert.alert('تم الحذف', 'تم حذف الفرع بنجاح');
+              router.replace('/admin/(tabs)/branches');
+            } catch {
+              Alert.alert('خطأ', 'فشل في حذف الفرع');
+            }
           },
         },
       ]
@@ -58,8 +92,7 @@ export default function BranchDetailsPage() {
   }
 
   return (
-    <View style={styles.container}>
-      {/* زر الرجوع */}
+    <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
       <TouchableOpacity style={styles.backButton} onPress={() => router.push('/admin/(tabs)/branches')}>
         <Ionicons name="arrow-back" size={28} color="#812732" />
       </TouchableOpacity>
@@ -69,75 +102,101 @@ export default function BranchDetailsPage() {
       </View>
 
       <Text style={styles.branchName}>{branchData.name}</Text>
-      <Text style={styles.branchLocation}>{branchData.location}</Text>
+      <Text style={styles.branchLocation}>{branchData.address || 'بدون عنوان'}</Text>
 
+      {/* معلومات الاتصال */}
       <View style={styles.infoBox}>
-        <Text style={styles.infoTitle}>مبيعات اليوم:</Text>
+        <Text style={styles.infoTitle}>📞 الهاتف:</Text>
+        <Text style={styles.infoValue}>{branchData.phone || 'غير متوفر'}</Text>
+      </View>
+      <View style={styles.infoBox}>
+        <Text style={styles.infoTitle}>📧 البريد الإلكتروني:</Text>
+        <Text style={styles.infoValue}>{branchData.email || 'غير متوفر'}</Text>
+      </View>
+
+      {/* بيانات وهمية */}
+      <View style={styles.infoBox}>
+        <Text style={styles.infoTitle}>💰 مبيعات اليوم:</Text>
         <Text style={styles.infoValue}>٣٬٥٠٠ ريال</Text>
       </View>
-
       <View style={styles.infoBox}>
-        <Text style={styles.infoTitle}>عدد الطلبات النشطة:</Text>
+        <Text style={styles.infoTitle}>📦 عدد الطلبات النشطة:</Text>
         <Text style={styles.infoValue}>١٢ طلب</Text>
       </View>
-
       <View style={styles.infoBox}>
-        <Text style={styles.infoTitle}>عدد الجلسات النشطة (كاشير):</Text>
+        <Text style={styles.infoTitle}>🧾 عدد الجلسات النشطة (كاشير):</Text>
         <Text style={styles.infoValue}>٤ جلسات</Text>
       </View>
 
+      {/* المستخدمون المرتبطون */}
       <View style={styles.infoBox}>
-        <Text style={styles.infoTitle}>عدد المستخدمين في الفرع:</Text>
-        <Text style={styles.infoValue}>٥ مستخدمين</Text>
+        <Text style={styles.infoTitle}>👥 عدد المستخدمين المرتبطين بالفرع:</Text>
+        <Text style={styles.infoValue}>{branchData?.users?.length || 0} مستخدم</Text>
+      </View>
+      {branchData?.users?.length > 0 && (
+        <View style={styles.infoBox}>
+          <Text style={[styles.infoTitle, { marginBottom: 10 }]}>قائمة المستخدمين:</Text>
+          {branchData.users.map((user: any) => (
+            <View key={user.id} style={{ marginBottom: 10 }}>
+              <Text style={styles.infoValue}>👤 {user.username}</Text>
+              <Text style={styles.infoValue}>📧 {user.email}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* ساعات العمل */}
+      <View style={styles.infoBox}>
+        <Text style={[styles.infoTitle, { marginBottom: 10 }]}>⏰ أيام وساعات العمل:</Text>
+        {branchData.workingHours?.length > 0 ? (
+          branchData.workingHours.map((wh: any) => (
+            <Text key={wh.id} style={styles.infoValue}>
+              {dayNames[wh.dayOfWeek]}:{" "}
+              {wh.isOpen
+                ? `${wh.openTime} - ${wh.closeTime}`
+                : "مغلق"}
+            </Text>
+          ))
+        ) : (
+          <Text style={styles.infoValue}>لا توجد بيانات مضافة</Text>
+        )}
       </View>
 
-      {/* أزرار التعديل والحذف */}
+      {/* الإجراءات */}
       <View style={styles.actionsContainer}>
         <TouchableOpacity style={styles.editButton} onPress={handleEdit}>
           <Text style={styles.buttonText}>تعديل الفرع</Text>
         </TouchableOpacity>
-
         <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
           <Text style={styles.buttonText}>مسح الفرع</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    flex: 1, justifyContent: 'center', alignItems: 'center',
   },
   container: {
-    flex: 1,
+    flexGrow: 1,
     backgroundColor: '#fff',
     padding: 20,
     paddingTop: 50,
+    paddingBottom: 100,
   },
   backButton: {
-    position: 'absolute',
-    top: 40,
-    left: 20,
-    zIndex: 10,
+    position: 'absolute', top: 40, left: 20, zIndex: 10,
   },
   iconContainer: {
-    alignItems: 'center',
-    marginBottom: 20,
+    alignItems: 'center', marginBottom: 20,
   },
   branchName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#812732',
-    textAlign: 'center',
+    fontSize: 24, fontWeight: 'bold', color: '#812732', textAlign: 'center',
   },
   branchLocation: {
-    fontSize: 16,
-    color: '#555',
-    textAlign: 'center',
-    marginBottom: 20,
+    fontSize: 16, color: '#555', textAlign: 'center', marginBottom: 20,
   },
   infoBox: {
     backgroundColor: '#f8f8f8',
@@ -146,20 +205,13 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   infoTitle: {
-    fontSize: 16,
-    color: '#812732',
-    fontWeight: 'bold',
-    marginBottom: 5,
-    textAlign: 'right',
+    fontSize: 16, color: '#812732', fontWeight: 'bold', marginBottom: 5, textAlign: 'right',
   },
   infoValue: {
-    fontSize: 16,
-    color: '#333',
-    textAlign: 'right',
+    fontSize: 16, color: '#333', textAlign: 'right',
   },
   actionsContainer: {
-    marginTop: 30,
-    gap: 15,
+    marginTop: 30, gap: 15,
   },
   editButton: {
     backgroundColor: '#4CAF50',
