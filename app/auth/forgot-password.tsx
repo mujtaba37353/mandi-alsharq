@@ -17,7 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export default function ForgotPasswordScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
-  const baseUrl = 'http://143.244.156.186:3007';
+  const baseUrl = 'https://cam4rent.net';
 
   const isValidEmail = (email: string) => {
     const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

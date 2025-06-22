@@ -5,20 +5,32 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from 'react';
 
 const screenWidth = Dimensions.get('window').width;
-const BASE_URL = "http://143.244.156.186:3007";
-
+const BASE_URL = "https://cam4rent.net";
 
 export default function AdminMainPage() {
   const router = useRouter();
   const [todayDate, setTodayDate] = useState('');
-
   const [branches, setBranches] = useState([]);
   const [role, setRole] = useState<string | null>(null);
+  const [currentBranchId, setCurrentBranchId] = useState<string | null>(null);
 
   const fetchBranches = async () => {
     try {
       const token = await AsyncStorage.getItem("token");
       if (!token) return;
+
+      if (role === "CASHIER" || role === "DELIVERY") {
+        const res = await fetch(`${BASE_URL}/users/profile`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (res.ok && data.data.branch) {
+          setBranches([data.data.branch]);
+        } else {
+          Alert.alert("لا تملك صلاحية عرض الفروع");
+        }
+        return;
+      }
 
       const response = await fetch(`${BASE_URL}/branches`, {
         headers: {
@@ -38,22 +50,24 @@ export default function AdminMainPage() {
     }
   };
 
-  const fetchRole = async () => {
+  const fetchUserProfile = async () => {
     try {
       const token = await AsyncStorage.getItem("token");
       if (!token) return;
+
       const res = await fetch(`${BASE_URL}/users/profile`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+
       const data = await res.json();
       if (res.ok) {
         setRole(data.data.role);
+        setCurrentBranchId(data.data.branchId || null);
       }
     } catch (e) {
       console.log("خطأ جلب الدور", e);
     }
   };
-
 
   useEffect(() => {
     const today = new Date();
@@ -64,9 +78,12 @@ export default function AdminMainPage() {
       day: 'numeric',
     });
     setTodayDate(formatted);
-    fetchRole();
-    fetchBranches();
+    fetchUserProfile();
   }, []);
+
+  useEffect(() => {
+    if (role) fetchBranches();
+  }, [role]);
 
   const salesData = {
     labels: ['1', '5', '10', '15', '20', '25'],
@@ -77,7 +94,6 @@ export default function AdminMainPage() {
       },
     ],
   };
-
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
@@ -104,9 +120,7 @@ export default function AdminMainPage() {
           decimalPlaces: 0,
           color: (opacity = 1) => `rgba(129, 39, 50, ${opacity})`,
           labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-          style: {
-            borderRadius: 16,
-          },
+          style: { borderRadius: 16 },
           propsForDots: {
             r: "4",
             strokeWidth: "2",
@@ -121,26 +135,28 @@ export default function AdminMainPage() {
 
       <Text style={styles.sectionTitle}>الفروع</Text>
 
-      {/* قائمة الفروع */}
       <ScrollView contentContainerStyle={styles.gridContainer}>
-          {branches.map((branch) => {
-            const isClickable = role === "OWNER";
-            const Wrapper = isClickable ? TouchableOpacity : View;
+        {branches.map((branch) => {
+          const isClickable =
+            role === "OWNER" ||
+            (role === "BRANCH_ADMIN" && currentBranchId === branch.id);
 
-            return (
-              <Wrapper
-                key={branch.id}
-                style={styles.branchBoxGrid}
-                {...(isClickable && {
-                  onPress: () => router.push(`/admin/branch/${branch.id}`),
-                })}
-              >
-                <Text style={styles.branchName}>{branch.name}</Text>
-                <Text style={styles.branchDetail}>📞 {branch.phone}</Text>
-                <Text style={styles.branchDetail}>👥 {branch.users?.length || 0} مستخدم</Text>
-              </Wrapper>
-            );
-          })}
+          const Wrapper = isClickable ? TouchableOpacity : View;
+
+          return (
+            <Wrapper
+              key={branch.id}
+              style={styles.branchBoxGrid}
+              {...(isClickable && {
+                onPress: () => router.push(`/admin/branch/${branch.id}`),
+              })}
+            >
+              <Text style={styles.branchName}>{branch.name}</Text>
+              <Text style={styles.branchDetail}>📞 {branch.phone}</Text>
+              <Text style={styles.branchDetail}>👥 {branch.users?.length || 0} مستخدم</Text>
+            </Wrapper>
+          );
+        })}
       </ScrollView>
     </ScrollView>
   );
@@ -199,5 +215,4 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 4,
   },
-  
 });

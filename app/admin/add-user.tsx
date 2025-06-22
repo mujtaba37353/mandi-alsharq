@@ -14,13 +14,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BASE_URL = 'http://143.244.156.186:3007';
+const BASE_URL = 'https://cam4rent.net';
 
 export default function AddUserPage() {
   const router = useRouter();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState('USER');
+  const [role, setRole] = useState('CASHIER');
   const [password, setPassword] = useState('');
   const [branchId, setBranchId] = useState(null);
   const [branches, setBranches] = useState([]);
@@ -28,9 +28,8 @@ export default function AddUserPage() {
   const [userBranchId, setUserBranchId] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const allowedRoles = ['USER', 'CASHIER', 'DELIVERY', 'BRANCH_ADMIN'];
+  const allowedRoles = ['CASHIER', 'DELIVERY', 'BRANCH_ADMIN'];
   const roleTranslation = {
-    USER: 'مستخدم',
     CASHIER: 'كاشير',
     DELIVERY: 'عامل توصيل',
     BRANCH_ADMIN: 'مدير فرع',
@@ -79,32 +78,55 @@ export default function AddUserPage() {
       return;
     }
 
+    if (userRole === 'BRANCH_ADMIN' && role === 'USER') {
+      Alert.alert('خطأ', 'لا يمكن لمدير الفرع إضافة مستخدم عادي');
+      return;
+    }
+
     try {
       const token = await AsyncStorage.getItem('token');
       if (!token) return;
 
-      const response = await fetch(`${BASE_URL}/users`, {
+      let endpoint = '';
+      let payload: any = {
+        username,
+        email,
+        role,
+        password,
+      };
+
+      if (userRole === 'OWNER') {
+        if (!branchId) {
+          Alert.alert('خطأ', 'يرجى اختيار الفرع');
+          return;
+        }
+        endpoint = '/users/owner/create';
+        payload.branchId = branchId;
+      } else if (userRole === 'BRANCH_ADMIN') {
+        endpoint = '/users/branch';
+        payload.branchId = userBranchId;
+      } else {
+        Alert.alert('خطأ', 'ليست لديك صلاحية لإضافة مستخدم');
+        return;
+      }
+
+      const response = await fetch(`${BASE_URL}${endpoint}`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          username,
-          email,
-          role,
-          password,
-          branchId: userRole === 'OWNER' ? branchId : userBranchId,
-        }),
+        body: JSON.stringify(payload),
       });
+
+      const data = await response.json();
 
       if (response.ok) {
         Alert.alert('تم', 'تمت إضافة المستخدم بنجاح');
         router.back();
       } else {
-        const data = await response.json();
         console.error('فشل إضافة المستخدم', data.message);
-        Alert.alert('خطأ', 'فشل في إضافة المستخدم');
+        Alert.alert('خطأ', data.message || 'فشل في إضافة المستخدم');
       }
     } catch (error) {
       console.error('خطأ', error);
@@ -169,15 +191,10 @@ export default function AddUserPage() {
       {allowedRoles.map((r) => (
         <TouchableOpacity
           key={r}
-          style={[
-            styles.roleOption,
-            role === r && { backgroundColor: '#812732' },
-          ]}
+          style={[styles.roleOption, role === r && { backgroundColor: '#812732' }]}
           onPress={() => setRole(r)}
         >
-          <Text style={[styles.roleText, role === r && { color: '#fff' }]}>
-            {roleTranslation[r]}
-          </Text>
+          <Text style={[styles.roleText, role === r && { color: '#fff' }]}> {roleTranslation[r]} </Text>
         </TouchableOpacity>
       ))}
 
@@ -188,15 +205,10 @@ export default function AddUserPage() {
           {branches.map((b) => (
             <TouchableOpacity
               key={b.id}
-              style={[
-                styles.branchOption,
-                branchId === b.id && { backgroundColor: '#812732' },
-              ]}
+              style={[styles.branchOption, branchId === b.id && { backgroundColor: '#812732' }]}
               onPress={() => setBranchId(b.id)}
             >
-              <Text style={[styles.branchText, branchId === b.id && { color: '#fff' }]}>
-                {b.name}
-              </Text>
+              <Text style={[styles.branchText, branchId === b.id && { color: '#fff' }]}> {b.name} </Text>
             </TouchableOpacity>
           ))}
         </>

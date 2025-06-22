@@ -12,11 +12,12 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import axios from 'axios'; // تأكد أنك ثبتت axios
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BASE_URL = 'http://143.244.156.186:3007';
+const BASE_URL = 'https://cam4rent.net';
 
 export default function AdminAccountScreen() {
   const router = useRouter();
@@ -81,79 +82,73 @@ export default function AdminAccountScreen() {
     }
   };
 
-  const handleSave = async () => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      if (!token) return;
-  
-      let imageUrl = null;
-  
-      // رفع الصورة إذا تم اختيار واحدة
-      if (imageUri) {
-        const formData = new FormData();
-        formData.append('image', {
-          uri: imageUri,
-          name: 'avatar.jpg',
-          type: 'image/jpeg',
-        } as any);
-  
-        const uploadResponse = await fetch(`${BASE_URL}/uploads/image`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'multipart/form-data',
-          },
-          body: formData,
-        });
-  
-        const uploadData = await uploadResponse.json();
-  
-        if (uploadResponse.ok && uploadData.url) {
-          imageUrl = uploadData.url; // فقط المسار مثل: /uploads/images/xxx.jpg
-        } else {
-          Alert.alert('خطأ', 'فشل رفع الصورة');
-          return;
-        }
-      }
-  
-      // إعداد بيانات التحديث
-      const payload: any = {
-        username: profile.username,
-        email: profile.email,
-      };
-  
-      if (profile.password.trim()) {
-        payload.password = profile.password;
-      }
-  
-      if (imageUrl) {
-        payload.imageUrl = imageUrl;
-      }
-  
-      // إرسال التحديث إلى السيرفر
-      const updateResponse = await fetch(`${BASE_URL}/users/profile`, {
-        method: 'PATCH',
+
+const handleSave = async () => {
+  try {
+    const token = await AsyncStorage.getItem('token');
+    if (!token) return;
+
+    let imageUrl = null;
+
+    // رفع الصورة إذا تم اختيار واحدة
+    if (imageUri) {
+      const formData = new FormData();
+      formData.append('image', {
+        uri: imageUri,
+        name: 'avatar.jpg',
+        type: 'image/jpeg',
+      } as any);
+
+      const uploadResponse = await axios.post(`${BASE_URL}/uploads/image`, formData, {
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
+          'Content-Type': 'multipart/form-data',
         },
-        body: JSON.stringify(payload),
       });
-  
-      const result = await updateResponse.json();
-  
-      if (updateResponse.ok) {
-        Alert.alert('تم الحفظ', 'تم تحديث الحساب بنجاح ✅');
-        router.replace('/admin/(tabs)/main');
-      } else {
-        console.error('فشل التحديث', result.message);
-        Alert.alert('خطأ', result.message || 'حدث خطأ أثناء تحديث البيانات');
-      }
-    } catch (error) {
-      console.error('خطأ أثناء الحفظ', error);
-      Alert.alert('خطأ', 'حدث خطأ غير متوقع أثناء الحفظ');
+
+
+        if ((uploadResponse.status === 200 || uploadResponse.status === 201) && uploadResponse.data.url) {
+          imageUrl = uploadResponse.data.url;
+        } else {
+          Alert.alert('خطأ', uploadResponse.data?.message || 'فشل رفع الصورة');
+          return;
+        }
+
     }
-  };
+
+    // إعداد بيانات التحديث
+    const payload: any = {
+      username: profile.username,
+      email: profile.email,
+    };
+
+    if (profile.password.trim()) {
+      payload.password = profile.password;
+    }
+
+    if (imageUrl) {
+      payload.imageUrl = imageUrl;
+    }
+
+    // إرسال تحديث الحساب
+    const updateResponse = await axios.patch(`${BASE_URL}/users/profile`, payload, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (updateResponse.status === 200) {
+      Alert.alert('تم الحفظ', 'تم تحديث الحساب بنجاح ✅');
+      router.replace('/admin/(tabs)/main');
+    } else {
+      Alert.alert('خطأ', 'فشل تحديث الحساب');
+    }
+  } catch (error: any) {
+    console.error('❌ خطأ أثناء الحفظ:', error?.response?.data || error.message);
+    Alert.alert('خطأ', 'حدث خطأ غير متوقع أثناء الحفظ');
+  }
+};
+
   
 
   const handleLogout = async () => {

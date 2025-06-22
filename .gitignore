@@ -1,7 +1,4 @@
-<<<<<<< HEAD
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-
-# dependencies
+# Node dependencies
 node_modules/
 
 # Expo
@@ -21,7 +18,7 @@ expo-env.d.ts
 # Metro
 .metro-health-check*
 
-# debug
+# Debug files
 npm-debug.*
 yarn-debug.*
 yarn-error.*
@@ -30,21 +27,11 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# Local environment
 .env*.local
 
-# typescript
+# TypeScript
 *.tsbuildinfo
 
+# Ignore example app
 app-example
-=======
-# Exclude everything
-*
-
-# But include docs folder
-!docs/
-!docs/**/*
-
-# Keep .gitignore itself
-!.gitignore 
->>>>>>> 6146af83f3ecb6b97e3b9bee1f0499d00b75fc2e

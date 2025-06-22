@@ -1,40 +1,43 @@
-// app/admin/branch/edit/[id].tsx
 import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  Switch,
+  View, Text, TextInput, StyleSheet, TouchableOpacity,
+  ScrollView, KeyboardAvoidingView, Platform, Alert, Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BASE_URL = 'http://143.244.156.186:3007';
+const BASE_URL = 'https://cam4rent.net';
 const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+
+const defaultWorkingHours = Array(7).fill(0).map(() => ({
+  isOpen: true,
+  openTime: '09:00',
+  closeTime: '22:00',
+}));
 
 export default function EditBranchPage() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
 
   const [form, setForm] = useState({
-    name: '',
-    address: '',
-    phone: '',
-    email: '',
-    latitude: '',
-    longitude: '',
+    name: '', address: '', phone: '', email: '', latitude: '', longitude: '',
   });
+  const [workingHours, setWorkingHours] = useState(defaultWorkingHours);
+  const [userRole, setUserRole] = useState('');
+  const [userBranchId, setUserBranchId] = useState('');
 
-  const [workingHours, setWorkingHours] = useState(
-    Array(7).fill({ isOpen: true, openTime: '09:00', closeTime: '22:00' })
-  );
+  const fetchUserInfo = async () => {
+    const token = await AsyncStorage.getItem('token');
+    const res = await fetch(`${BASE_URL}/users/profile`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setUserRole(data.data.role);
+      setUserBranchId(data.data.branchId);
+    }
+  };
 
   const fetchBranch = async () => {
     try {
@@ -69,7 +72,7 @@ export default function EditBranchPage() {
       } else {
         Alert.alert('خطأ', 'فشل جلب بيانات الفرع');
       }
-    } catch (err) {
+    } catch {
       Alert.alert('خطأ', 'تعذر الاتصال بالسيرفر');
     }
   };
@@ -84,7 +87,7 @@ export default function EditBranchPage() {
       const token = await AsyncStorage.getItem('token');
       if (!token) return;
 
-      const response = await fetch(`${BASE_URL}/branches/${id}`, {
+      const resBranch = await fetch(`${BASE_URL}/branches/${id}`, {
         method: 'PATCH',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -94,43 +97,69 @@ export default function EditBranchPage() {
           ...form,
           latitude: parseFloat(form.latitude),
           longitude: parseFloat(form.longitude),
-          workingHours: workingHours.map((d, index) => ({
-            dayOfWeek: index,
-            isOpen: d.isOpen,
-            openTime: d.openTime,
-            closeTime: d.closeTime,
-          })),
         }),
       });
 
-      const result = await response.json();
+      if (!resBranch.ok) {
+        const err = await resBranch.json();
+        return Alert.alert('خطأ', err.message || 'فشل تعديل بيانات الفرع');
+      }
 
-      if (response.ok) {
-        Alert.alert('تم التحديث', 'تم تعديل بيانات الفرع بنجاح');
+      const whPayload = workingHours.map((d, index) => ({
+        dayOfWeek: index,
+        isOpen: d.isOpen,
+        openTime: d.openTime,
+        closeTime: d.closeTime,
+      }));
+
+      const resWH = await fetch(`${BASE_URL}/branches/${id}/working-hours/bulk`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ workingHours: whPayload }),
+      });
+
+      if (resWH.ok) {
+        Alert.alert('تم', 'تم تعديل بيانات الفرع وساعات العمل');
         router.replace('/admin/(tabs)/branches');
       } else {
-        Alert.alert('خطأ', result.message || 'فشل التحديث');
+        const err = await resWH.json();
+        Alert.alert('خطأ', err.message || 'فشل تعديل أوقات العمل');
       }
-    } catch (error) {
-      Alert.alert('خطأ', 'حدث خطأ غير متوقع');
+    } catch {
+      Alert.alert('خطأ', 'فشل الاتصال بالخادم');
     }
   };
 
   const copyDayToAll = (index: number) => {
-    const selected = workingHours[index];
-    const copied = Array(7).fill({ ...selected });
+    const selected = { ...workingHours[index] };
+    const copied = Array(7).fill(0).map(() => ({ ...selected }));
     setWorkingHours(copied);
   };
 
   const resetWorkingHours = () => {
-    setWorkingHours(
-      Array(7).fill({ isOpen: true, openTime: '09:00', closeTime: '22:00' })
-    );
+    setWorkingHours(defaultWorkingHours);
   };
 
   useEffect(() => {
+    fetchUserInfo();
     fetchBranch();
   }, []);
+
+  if (
+    userRole !== 'OWNER' &&
+    !(userRole === 'BRANCH_ADMIN' && userBranchId === id)
+  ) {
+    return (
+      <View style={styles.container}>
+        <Text style={{ color: 'red', textAlign: 'center', marginTop: 100 }}>
+          ❌ لا تملك صلاحية لتعديل هذا الفرع
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -145,14 +174,7 @@ export default function EditBranchPage() {
 
         <Text style={styles.title}>تعديل بيانات الفرع</Text>
 
-        {[
-          { label: 'اسم الفرع', key: 'name' },
-          { label: 'العنوان', key: 'address' },
-          { label: 'البريد الإلكتروني', key: 'email' },
-          { label: 'رقم الهاتف', key: 'phone', keyboardType: 'phone-pad' },
-          { label: 'خط العرض (Latitude)', key: 'latitude', keyboardType: 'decimal-pad' },
-          { label: 'خط الطول (Longitude)', key: 'longitude', keyboardType: 'decimal-pad' },
-        ].map((field) => (
+        {[{ label: 'اسم الفرع', key: 'name' }, { label: 'العنوان', key: 'address' }, { label: 'البريد الإلكتروني', key: 'email' }, { label: 'رقم الهاتف', key: 'phone', keyboardType: 'phone-pad' }, { label: 'خط العرض', key: 'latitude', keyboardType: 'decimal-pad' }, { label: 'خط الطول', key: 'longitude', keyboardType: 'decimal-pad' }].map((field) => (
           <View key={field.key} style={styles.inputBox}>
             <Text style={styles.label}>{field.label}</Text>
             <TextInput
@@ -179,8 +201,9 @@ export default function EditBranchPage() {
               <Switch
                 value={day.isOpen}
                 onValueChange={(val) => {
-                  const newWH = [...workingHours];
-                  newWH[index].isOpen = val;
+                  const newWH = workingHours.map((d, i) =>
+                    i === index ? { ...d, isOpen: val } : d
+                  );
                   setWorkingHours(newWH);
                 }}
               />
@@ -192,8 +215,9 @@ export default function EditBranchPage() {
                   placeholder="وقت الفتح"
                   value={day.openTime}
                   onChangeText={(val) => {
-                    const newWH = [...workingHours];
-                    newWH[index].openTime = val;
+                    const newWH = workingHours.map((d, i) =>
+                      i === index ? { ...d, openTime: val } : d
+                    );
                     setWorkingHours(newWH);
                   }}
                   textAlign="right"
@@ -203,8 +227,9 @@ export default function EditBranchPage() {
                   placeholder="وقت الإغلاق"
                   value={day.closeTime}
                   onChangeText={(val) => {
-                    const newWH = [...workingHours];
-                    newWH[index].closeTime = val;
+                    const newWH = workingHours.map((d, i) =>
+                      i === index ? { ...d, closeTime: val } : d
+                    );
                     setWorkingHours(newWH);
                   }}
                   textAlign="right"

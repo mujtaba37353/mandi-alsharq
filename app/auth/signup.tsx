@@ -17,7 +17,6 @@ export default function SignUpScreen() {
   const router = useRouter();
 
   const [username, setUsername] = useState('');
-  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -32,7 +31,7 @@ export default function SignUpScreen() {
   };
 
   const handleSignUp = async () => {
-    if (!username || !phone || !email || !password) {
+    if (!username || !email || !password) {
       Alert.alert('تنبيه', 'يرجى ملء جميع الحقول');
       return;
     }
@@ -42,13 +41,9 @@ export default function SignUpScreen() {
       return;
     }
 
-    if (!isValidPhone(phone)) {
-      Alert.alert('تنبيه', 'رقم الجوال يجب أن يبدأ بـ 05 ويتكون من 10 أرقام');
-      return;
-    }
 
     try {
-      const response = await fetch('http://143.244.156.186:3007/auth/register', {
+      const response = await fetch('https://cam4rent.net/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -100,13 +95,6 @@ export default function SignUpScreen() {
           style={styles.input}
           value={username}
           onChangeText={setUsername}
-        />
-        <TextInput
-          placeholder="رقم الجوال"
-          style={styles.input}
-          keyboardType="phone-pad"
-          value={phone}
-          onChangeText={setPhone}
         />
         <TextInput
           placeholder="البريد الإلكتروني"

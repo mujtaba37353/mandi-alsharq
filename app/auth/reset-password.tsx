@@ -18,7 +18,7 @@ export default function ResetPasswordScreen() {
   const router = useRouter();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const baseUrl = 'http://143.244.156.186:3007';
+  const baseUrl = 'https://cam4rent.net';
 
   const handleConfirm = async () => {
     if (!password || !confirmPassword) {

@@ -11,25 +11,29 @@ import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
 
-const BASE_URL = "http://143.244.156.186:3007";
-
+const BASE_URL = "https://cam4rent.net";
 
 export default function BranchesPage() {
   const router = useRouter();
   const [branches, setBranches] = useState([]);
   const [role, setRole] = useState<string | null>(null);
+  const [currentBranchId, setCurrentBranchId] = useState<string | null>(null);
+  const [hasAccess, setHasAccess] = useState(true);
 
   const fetchBranches = async () => {
     try {
       const token = await AsyncStorage.getItem("token");
       if (!token) return;
 
-      const response = await fetch(`${BASE_URL}/branches`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      if (role === "CASHIER" || role === "DELIVERY") {
+        // ممنوع من الوصول
+        setHasAccess(false);
+        return;
+      }
 
+      const response = await fetch(`${BASE_URL}/branches`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const data = await response.json();
       if (response.ok) {
         setBranches(data);
@@ -42,7 +46,7 @@ export default function BranchesPage() {
     }
   };
 
-  const fetchRole = async () => {
+  const fetchUserInfo = async () => {
     try {
       const token = await AsyncStorage.getItem("token");
       if (!token) return;
@@ -52,20 +56,37 @@ export default function BranchesPage() {
       const data = await res.json();
       if (res.ok) {
         setRole(data.data.role);
+        setCurrentBranchId(data.data.branchId || null);
       }
     } catch (e) {
-      console.log("خطأ جلب الدور", e);
+      console.log("خطأ جلب بيانات المستخدم", e);
     }
   };
 
   useEffect(() => {
-    fetchRole();
-    fetchBranches();
+    fetchUserInfo();
   }, []);
+
+  useEffect(() => {
+    if (role) fetchBranches();
+  }, [role]);
+
+  const isBranchClickable = (branchId: string) => {
+    if (role === "OWNER") return true;
+    if (role === "BRANCH_ADMIN" && currentBranchId === branchId) return true;
+    return false;
+  };
+
+  if (!hasAccess) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.forbidden}>ليس لديك صلاحية للوصول إلى هذه الصفحة</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      {/* زر إضافة فرع للمالك فقط */}
       {role === "OWNER" && (
         <TouchableOpacity
           style={styles.addButton}
@@ -76,34 +97,35 @@ export default function BranchesPage() {
         </TouchableOpacity>
       )}
 
-      {/* قائمة الفروع */}
       <ScrollView contentContainerStyle={styles.branchList}>
-          {branches.map((branch) => {
-            const isClickable = role === "OWNER";
-            const Wrapper = isClickable ? TouchableOpacity : View;
+        {branches.map((branch) => {
+          const clickable = isBranchClickable(branch.id);
+          const Wrapper = clickable ? TouchableOpacity : View;
 
-            return (
-              <Wrapper
-                key={branch.id}
-                style={styles.branchBox}
-                {...(isClickable && {
-                  onPress: () => router.push(`/admin/branch/${branch.id}`),
-                })}
-              >
-                <Text style={styles.branchName}>{branch.name}</Text>
-                <Text style={styles.branchLocation}>رقم الهاتف: {branch.phone}</Text>
-                <Text style={styles.branchLocation}>البريد الالكتروني: {branch.email}</Text>
-                <Text style={styles.branchLocation}>العنوان: {branch.address}</Text>
-              </Wrapper>
-            );
-          })}
+          return (
+            <Wrapper
+              key={branch.id}
+              style={[
+                styles.branchBox,
+                !clickable && { backgroundColor: "#eee" },
+              ]}
+              {...(clickable && {
+                onPress: () => router.push(`/admin/branch/${branch.id}`),
+              })}
+            >
+              <Text style={styles.branchName}>{branch.name}</Text>
+              <Text style={styles.branchLocation}>📞 {branch.phone}</Text>
+              <Text style={styles.branchLocation}>📧 {branch.email}</Text>
+              <Text style={styles.branchLocation}>📍 {branch.address}</Text>
+            </Wrapper>
+          );
+        })}
       </ScrollView>
-
     </View>
   );
 }
 
-export const styles = StyleSheet.create({
+const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff", padding: 10 },
   addButton: {
     flexDirection: "row",
@@ -126,9 +148,27 @@ export const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 15,
   },
-  branchName: { fontSize: 18, fontWeight: "bold", color: "#812732" },
-  branchLocation: { fontSize: 14, color: "#555", marginTop: 5 },
-  hoursContainer: { marginTop: 10 },
-  hoursTitle: { fontWeight: "bold", color: "#444" },
-  workingHour: { fontSize: 13, color: "#666", marginTop: 2 },
+  branchName: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#812732",
+    marginBottom: 5,
+  },
+  branchLocation: {
+    fontSize: 14,
+    color: "#555",
+    marginTop: 2,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff'
+  },
+  forbidden: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#D32F2F',
+    textAlign: 'center',
+  },
 });

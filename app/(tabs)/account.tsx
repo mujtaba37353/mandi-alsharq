@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 
-const BASE_URL = 'http://143.244.156.186:3007';
+const BASE_URL = 'https://cam4rent.net';
 
 export default function AccountScreen() {
   const router = useRouter();

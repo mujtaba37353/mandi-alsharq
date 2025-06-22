@@ -63,7 +63,7 @@ export default function AdminTabsLayout() {
             else if (route.name === "branches") iconName = "business-outline";
             else if (route.name === "main") iconName = "home-outline";
             else if (route.name === "menus") iconName = "restaurant-outline";
-            else if (route.name === "reports") iconName = "bar-chart-outline";
+            else if (route.name === "orders") iconName = "bar-chart-outline";
 
             return (
               <View style={styles.iconWrapper}>
@@ -94,7 +94,7 @@ export default function AdminTabsLayout() {
           }}
         />
         <Tabs.Screen name="menus" options={{ title: "القوائم" }} />
-        <Tabs.Screen name="reports" options={{ title: "التقارير" }} />
+        <Tabs.Screen name="orders" options={{ title: "الطلبات" }} />
       </Tabs>
 
       <Modal

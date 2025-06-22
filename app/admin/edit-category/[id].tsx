@@ -6,71 +6,139 @@ import {
   TextInput,
   TouchableOpacity,
   Alert,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// بيانات وهمية للتجربة
-const fakeCategories = {
-  '1': { name: 'الأطباق الرئيسية' },
-  '2': { name: 'المقبلات' },
-};
+const BASE_URL = 'https://cam4rent.net';
 
 export default function EditCategoryPage() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
 
-  const [name, setName] = useState('');
+  const [nameAr, setNameAr] = useState('');
+  const [nameEn, setNameEn] = useState('');
+  const [role, setRole] = useState('');
+  const [branchId, setBranchId] = useState('');
 
   useEffect(() => {
-    // تحميل بيانات التصنيف عند فتح الصفحة
-    const category = fakeCategories[id as string];
-    if (category) setName(category.name);
-    else Alert.alert('خطأ', 'لم يتم العثور على التصنيف');
+    fetchRole();
+    fetchCategory();
   }, [id]);
 
-  const handleUpdate = () => {
-    if (!name.trim()) {
-      Alert.alert('تنبيه', 'يرجى إدخال اسم التصنيف');
+  const fetchRole = async () => {
+    const token = await AsyncStorage.getItem('token');
+    const res = await fetch(`${BASE_URL}/users/profile`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json();
+    if (res.ok) setRole(data.data.role);
+  };
+
+  const fetchCategory = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${BASE_URL}/categories/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setBranchId(data.branchId || '');
+        setNameAr(data.name || '');
+        const en = data.translations?.find((t) => t.language === 'EN');
+        setNameEn(en?.name || '');
+      } else {
+        Alert.alert('خطأ', 'فشل تحميل بيانات التصنيف');
+      }
+    } catch {
+      Alert.alert('خطأ', 'تعذر الاتصال بالخادم');
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (!nameAr.trim()) {
+      Alert.alert('تنبيه', 'يرجى إدخال اسم التصنيف بالعربية');
       return;
     }
 
-    // إرسال البيانات إلى الباكند هنا
-    console.log('تم تعديل التصنيف:', name);
-    router.back();
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const payload = {
+        name: nameAr,
+        branchId,
+        translations: [
+          { name: nameAr, language: 'AR' },
+          { name: nameEn, language: 'EN' },
+        ],
+      };
+
+      const res = await fetch(`${BASE_URL}/categories/${id}`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        Alert.alert('تم', 'تم تعديل التصنيف بنجاح');
+        router.replace('/admin/(tabs)/menus');
+      } else {
+        const data = await res.json();
+        Alert.alert('خطأ', data.message || 'فشل تعديل التصنيف');
+      }
+    } catch {
+      Alert.alert('خطأ', 'فشل الاتصال بالخادم');
+    }
   };
 
-  
+  if (role !== 'OWNER' && role !== 'BRANCH_ADMIN') {
+    return (
+      <View style={styles.container}>
+        <Text style={{ textAlign: 'center', color: 'red' }}>
+          ❌ لا تملك صلاحية لتعديل التصنيف
+        </Text>
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.container}>
-      {/* زر الرجوع */}
-      <TouchableOpacity onPress={() => router.push(`/admin/(tabs)/menus`)} style={styles.backButton}>
+    <ScrollView contentContainerStyle={styles.container}>
+      <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
         <Ionicons name="arrow-back" size={24} color="#812732" />
       </TouchableOpacity>
 
-      {/* عنوان الصفحة */}
       <Text style={styles.header}>تعديل التصنيف</Text>
 
-      {/* إدخال الاسم */}
       <TextInput
         style={styles.input}
-        placeholder="اسم التصنيف"
+        placeholder="اسم التصنيف بالعربية"
         placeholderTextColor="#999"
-        value={name}
-        onChangeText={setName}
+        value={nameAr}
+        onChangeText={setNameAr}
       />
 
-      {/* زر الحفظ */}
+      <TextInput
+        style={styles.input}
+        placeholder="اسم التصنيف بالإنجليزية (اختياري)"
+        placeholderTextColor="#999"
+        value={nameEn}
+        onChangeText={setNameEn}
+      />
+
       <TouchableOpacity style={styles.saveButton} onPress={handleUpdate}>
         <Ionicons name="save-outline" size={22} color="#fff" />
         <Text style={styles.saveButtonText}>حفظ التعديلات</Text>
       </TouchableOpacity>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', padding: 20 },
+  container: { flexGrow: 1, backgroundColor: '#fff', padding: 20 },
   backButton: { marginBottom: 10 },
   header: {
     fontSize: 20,

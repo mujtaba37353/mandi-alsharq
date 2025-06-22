@@ -1,84 +1,190 @@
-// app/tabs/home.tsx
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Image,
+  Alert,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import useUserLocation from '../hooks/useUserLocation';
+
+const BASE_URL = 'https://cam4rent.net';
 
 export default function HomeScreen() {
-  const [selectedCategory, setSelectedCategory] = useState('Breakfast');
   const router = useRouter();
+  const [categories, setCategories] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [wishlist, setWishlist] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [branchId, setBranchId] = useState(null);
+  const { location, loading, granted, requestLocationPermission } = useUserLocation();
+  const [productsLoading, setProductsLoading] = useState(false);
 
-  const categories = ['الفطور', 'الغداء', 'العشاء', 'خاص', 'مناسبات', 'حلى', 'مشروبات'];
+  useEffect(() => {
+    if (granted && location && !loading) {
+      fetchProducts(location.latitude, location.longitude);
+      fetchWishlist();
+    }
+  }, [granted, loading, location?.latitude, location?.longitude]);
 
-  const products = [
-    {
-      id: 1,
-      title: 'شاورما عربي علي الفحم',
-      price: 25,
-      image: require('../../assets/images/food1.png'), 
-    },
-    {
-      id: 2,
-      title: 'شاورما عربي علي الفحم',
-      price: 25,
-      image: require('../../assets/images/food2.png'),
-    },
-  ];
+  const fetchWishlist = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${BASE_URL}/wishlist`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setWishlist(data);
+      }
+    } catch (error) {
+      console.log('Wishlist error:', error);
+    }
+  };
+
+  const isInWishlist = (productId) => wishlist.some((item) => item.productId === productId);
+
+  const fetchAllCategories = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${BASE_URL}/categories`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok && Array.isArray(data)) {
+        setCategories(data);
+        setSelectedCategory(data[0]?._id || null);
+      } else {
+        setCategories([]);
+      }
+    } catch (err) {
+      console.log('Category fetch error:', err);
+      setCategories([]);
+    }
+  };
+
+  const fetchProducts = async (latitude, longitude) => {
+    try {
+      setProductsLoading(true);
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${BASE_URL}/products/all-with-nearest-branch`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ latitude, longitude }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setProducts(data.products.map(p => ({ ...p, branchId: data.branch?._id })));
+        const branchIdFromResponse = data.branch?._id || data.branch?.id;
+        if (branchIdFromResponse) {
+          setBranchId(branchIdFromResponse);
+          await fetchAllCategories();
+        }
+
+      } else {
+        Alert.alert('خطأ', 'فشل تحميل المنتجات');
+      }
+    } catch (error) {
+      Alert.alert('خطأ', 'فشل الاتصال بالخادم');
+    } finally {
+      setProductsLoading(false);
+    }
+  };
+
+  const filteredProducts = selectedCategory
+    ? products.filter((p) =>
+        p.categoryId === selectedCategory || p.category?._id === selectedCategory
+      )
+    : products;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-
-      {/* Category */}
       <View style={styles.section}>
         <View style={styles.rowBetween}>
           <Text style={styles.sectionTitle}>الفئات</Text>
-          <TouchableOpacity onPress={() => router.push('/categories')}>
-            <Text style={styles.seeAll}>انظر الكل</Text>
-          </TouchableOpacity>
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
-          {categories.map((cat) => (
-            <TouchableOpacity
-              key={cat}
-              style={[
-                styles.categoryButton,
-                selectedCategory === cat && styles.activeCategory,
-              ]}
-              onPress={() => router.push(`/category/${cat}`)}
-            >
-              <Text
-                style={[
-                  styles.categoryText,
-                  selectedCategory === cat && styles.activeCategoryText,
-                ]}
-              >
-                {cat}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        {categories.length > 0 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
+            {categories.map((cat) => {
+              const catId = cat._id || cat.id;
+              const arName = cat.translations?.find(t => t.language === 'AR')?.name || cat.name;
+              return (
+                <TouchableOpacity
+                  key={catId}
+                  style={[styles.categoryButton, selectedCategory === catId && styles.activeCategory]}
+                  onPress={() => router.push(`/category/${catId}`)} // ✅ هذا هو التعديل المطلوب فقط
+                >
+                  <Text style={[styles.categoryText, selectedCategory === catId && styles.activeCategoryText]}>
+                    {arName}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        ) : (
+          <Text style={{ marginTop: 10, color: '#888' }}>لا توجد فئات متاحة</Text>
+        )}
+
       </View>
 
-      {/* Products */}
       <View style={styles.section}>
-        <View style={styles.rowBetween}>
-          <Text style={styles.sectionTitle}>المنتجات</Text>
-        </View>
+        <Text style={styles.sectionTitle}>المنتجات</Text>
+        {productsLoading ? (
+          <Text style={{ textAlign: 'center', marginVertical: 20, color: '#888' }}>
+            جاري تحميل المنتجات...
+          </Text>
+        ) : (
+          filteredProducts.map((item) => {
+            const arTranslation = item.translations?.find((t) => t.language === 'AR');
+            return (
+              <View key={item.id} style={styles.productCard}>
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', flex: 1 }}
+                  onPress={() => router.push(`/product/${item.id}`)}
+                >
+                  <Image source={{ uri: item.imageUrl }} style={styles.productImage} />
+                  <View style={{ flex: 1, paddingHorizontal: 10 }}>
+                    <Text style={styles.productTitle}>{arTranslation?.name || item.name}</Text>
+                    <Text style={styles.productPrice}>{item.price} ريال</Text>
+                  </View>
+                  <Ionicons name="arrow-forward" size={20} color="#812732" />
+                </TouchableOpacity>
 
-        {products.map((item) => (
-          <TouchableOpacity
-            key={item.id}
-            style={styles.productCard}
-            onPress={() => router.push(`/product/${item.id}`)}
-          >
-            <Image source={item.image} style={styles.productImage} />
-            <View style={{ flex: 1, paddingHorizontal: 10 }}>
-              <Text style={styles.productTitle}>{item.title}</Text>
-              <Text style={styles.productPrice}>25 ريال</Text>
-            </View>
-            <Ionicons name="arrow-forward" size={20} color="#812732" />
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+                  <View style={{ backgroundColor: '#eee', padding: 8, borderRadius: 8 }}>
+                    <Ionicons
+                      name={isInWishlist(item.id) ? 'heart' : 'heart-outline'}
+                      size={20}
+                      color={isInWishlist(item.id) ? '#812732' : '#888'}
+                    />
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={() => router.push(`/product/${item.id}`)}
+                    style={{ backgroundColor: '#812732', padding: 8, borderRadius: 8 }}
+                  >
+                    <Ionicons name="cart" size={20} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          })
+        )}
+
+        {!granted && !loading && (
+          <TouchableOpacity onPress={requestLocationPermission} style={styles.permissionButton}>
+            <Text style={styles.permissionText}>السماح باستخدام الموقع</Text>
           </TouchableOpacity>
-        ))}
+        )}
       </View>
     </ScrollView>
   );
@@ -86,12 +192,9 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { padding: 20 },
-  morning: { fontSize: 14, color: '#888' },
-  user: { fontSize: 20, fontWeight: 'bold', color: '#812732' },
   section: { marginTop: 10 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#812732' },
-  seeAll: { color: '#888', fontSize: 14 },
   categoryScroll: { marginTop: 10 },
   categoryButton: {
     backgroundColor: '#eee',
@@ -104,8 +207,7 @@ const styles = StyleSheet.create({
   categoryText: { color: '#812732' },
   activeCategoryText: { color: '#fff' },
   productCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'column',
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 10,
@@ -115,4 +217,16 @@ const styles = StyleSheet.create({
   productImage: { width: 70, height: 70, borderRadius: 8 },
   productTitle: { fontSize: 16, fontWeight: 'bold', color: '#812732' },
   productPrice: { fontSize: 14, color: '#555' },
+  permissionButton: {
+    marginTop: 20,
+    padding: 12,
+    backgroundColor: '#812732',
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  permissionText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
 });

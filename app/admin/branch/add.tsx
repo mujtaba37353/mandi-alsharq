@@ -1,10 +1,21 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Alert, Switch } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Alert,
+  Switch,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BASE_URL = 'http://143.244.156.186:3007';
+const BASE_URL = 'https://cam4rent.net';
 
 const daysOfWeek = [
   { day: 0, label: 'الأحد' },
@@ -25,6 +36,9 @@ export default function AddBranchPage() {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
 
+  const [nameEN, setNameEN] = useState('');
+  const [addressEN, setAddressEN] = useState('');
+
   const [workingHours, setWorkingHours] = useState(
     daysOfWeek.map(day => ({
       dayOfWeek: day.day,
@@ -41,8 +55,8 @@ export default function AddBranchPage() {
   };
 
   const handleAddBranch = async () => {
-    if (!name || !address || !latitude || !longitude || !phone || !email) {
-      Alert.alert('تنبيه', 'يرجى تعبئة جميع الحقول');
+    if (!name || !address || !latitude || !longitude || !phone || !email || !nameEN || !addressEN) {
+      Alert.alert('تنبيه', 'يرجى تعبئة جميع الحقول المطلوبة');
       return;
     }
 
@@ -58,6 +72,18 @@ export default function AddBranchPage() {
         phone,
         email,
         workingHours,
+        translations: [
+          {
+            name: nameEN,
+            address: addressEN,
+            language: 'EN',
+          },
+          {
+            name: name,
+            address: address,
+            language: 'AR',
+          },
+        ],
       };
 
       const response = await fetch(`${BASE_URL}/branches`, {
@@ -97,8 +123,10 @@ export default function AddBranchPage() {
 
         <Text style={styles.title}>إضافة فرع جديد</Text>
 
-        <TextInput style={styles.input} placeholder="اسم الفرع" value={name} onChangeText={setName} textAlign="right" />
-        <TextInput style={styles.input} placeholder="العنوان" value={address} onChangeText={setAddress} textAlign="right" />
+        <TextInput style={styles.input} placeholder="اسم الفرع (عربي)" value={name} onChangeText={setName} textAlign="right" />
+        <TextInput style={styles.input} placeholder="العنوان (عربي)" value={address} onChangeText={setAddress} textAlign="right" />
+        <TextInput style={styles.input} placeholder="اسم الفرع (إنجليزي)" value={nameEN} onChangeText={setNameEN} textAlign="right" />
+        <TextInput style={styles.input} placeholder="العنوان (إنجليزي)" value={addressEN} onChangeText={setAddressEN} textAlign="right" />
         <TextInput style={styles.input} placeholder="خط العرض (Latitude)" value={latitude} onChangeText={setLatitude} keyboardType="numeric" textAlign="right" />
         <TextInput style={styles.input} placeholder="خط الطول (Longitude)" value={longitude} onChangeText={setLongitude} keyboardType="numeric" textAlign="right" />
         <TextInput style={styles.input} placeholder="رقم الهاتف" value={phone} onChangeText={setPhone} keyboardType="phone-pad" textAlign="right" />

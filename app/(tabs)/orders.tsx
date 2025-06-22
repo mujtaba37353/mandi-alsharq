@@ -1,126 +1,186 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  Image,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
+const BASE_URL = 'https://cam4rent.net';
 
-const orders = [
-  {
-    id: 1,
-    title: 'توصيل مجاني  ',
-    price: 'ابتداء من 19 ريال',
-    image: require('../../assets/images/food1.png'),
-    quantity: 2,
-  },
-  {
-    id: 2,
-    title: 'توصيل مجاني  ',
-    price: 'ابتداء من 19 ريال',
-    image: require('../../assets/images/food2.png'),
-    quantity: 2,
-  },
-  {
-    id: 3,
-    title: 'توصيل مجاني  ',
-    price: 'ابتداء من 19 ريال',
-    image: require('../../assets/images/food1.png'),
-    quantity: 2,
-  },
-];
+// ترجمة الحالة + اللون
+const getStatusDisplay = (status: string) => {
+  switch (status) {
+    case 'PENDING':
+      return { label: 'قيد المراجعة', color: '#812732' };
+    case 'CONFIRMED':
+      return { label: 'تم التأكيد', color: '#e67e22' };
+    case 'PREPARING':
+      return { label: 'قيد التحضير', color: '#3498db' };
+    case 'READY':
+      return { label: 'جاهز', color: '#27ae60' };
+    case 'OUT_FOR_DELIVERY':
+      return { label: 'خرج للتوصيل', color: '#9b59b6' };
+    case 'DELIVERING':
+      return { label: 'قيد التوصيل', color: '#2ecc71' };
+    case 'DELIVERED':
+    case 'COMPLETED':
+      return { label: 'تم التوصيل', color: '#95a5a6' };
+    case 'CANCELLED':
+      return { label: 'ملغي', color: '#999' };
+    default:
+      return { label: 'غير معروف', color: '#666' };
+  }
+};
 
 export default function OrdersScreen() {
   const router = useRouter();
-  return (
-    <ScrollView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>الطلبات الخاصة بك</Text>
-      </View>
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-      {/* Free Delivery Card */}
-      <View style={styles.freeDeliveryCard}>
-        <Ionicons name="fast-food-outline" size={24} color="#812732" />
-        <View style={{ marginLeft: 10 }}>
-          <Text style={styles.freeTitle}>توصيل مجاني لا محدود</Text>
-          <Text style={styles.freeSub}>اطلب الان واترك التوصيل علينا</Text>
+  const fetchOrders = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      const res = await fetch(`${BASE_URL}/orders/my-orders`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+      if (res.ok && Array.isArray(data.data)) {
+        setOrders(data.data);
+      }
+    } catch (err) {
+      console.error('فشل تحميل الطلبات', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchOrders();
+  }, []);
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#812732" />
+      </View>
+    );
+  }
+
+  if (orders.length === 0) {
+    return (
+      <View style={styles.center}>
+        <Text style={{ color: '#888' }}>لا توجد طلبات حالياً</Text>
+      </View>
+    );
+  }
+
+  const renderOrder = ({ item: order }) => {
+    const status = getStatusDisplay(order.status);
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.orderCard,
+          ['CANCELLED', 'DELIVERED', 'COMPLETED'].includes(order.status)
+            ? { backgroundColor: '#eee' } // أو استخدم status.color إن أحببت
+            : null,
+        ]}
+        onPress={() => router.push(`/orders/${order.id}`)}
+      >
+
+        <Image
+          source={{
+            uri:
+              order.items?.[0]?.product?.imageUrl ||
+              'https://via.placeholder.com/60',
+          }}
+          style={styles.image}
+        />
+        <View style={styles.orderInfo}>
+          <Text
+            style={[
+              styles.orderNumber,
+              ['CANCELLED', 'DELIVERED', 'COMPLETED'].includes(order.status)
+                ? { color: '#666' }
+                : null,
+            ]}
+          >
+            #{order.orderNumber}
+          </Text>
+          <Text style={[styles.status, { color: status.color }]}>
+            الحالة: {status.label}
+          </Text>
+          <Text
+            style={[
+              styles.total,
+              ['CANCELLED', 'DELIVERED', 'COMPLETED'].includes(order.status)
+                ? { color: '#666' }
+                : null,
+            ]}
+          >
+            الإجمالي: {order.total} ريال
+          </Text>
         </View>
-      </View>
+        <Ionicons name="chevron-forward-outline" size={20} color="#888" />
+      </TouchableOpacity>
+    );
+  };
 
-      {/* Orders List */}
-      {orders.map((item) => (
-        <TouchableOpacity key={item.id} style={styles.orderItem} onPress={() => router.push('/orders/[id]')}>
-          <View style={styles.qtyBox}>
-            <Text style={styles.qtyText}>{item.quantity}</Text>
-            <Ionicons name="add" size={16} color="#812732" />
-          </View>
-          <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text style={styles.orderTitle}>{item.title}</Text>
-            <Text style={styles.orderPrice}>{item.price}</Text>
-          </View>
-          <Image source={item.image} style={styles.orderImage} />
-        </TouchableOpacity>
-      ))}
-    </ScrollView>
+  return (
+    <FlatList
+      data={orders}
+      keyExtractor={(item) => item.id}
+      renderItem={renderOrder}
+      contentContainerStyle={{ padding: 20 }}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', paddingHorizontal: 20 },
-  header: {
-    flexDirection: 'row',
+  center: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 50,
-    marginBottom: 20,
   },
-  headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#812732' },
-
-  freeDeliveryCard: {
-    flexDirection: 'row',
-    borderWidth: 1,
-    borderColor: '#812732',
-    borderRadius: 12,
-    padding: 15,
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  freeTitle: { fontSize: 16, fontWeight: 'bold', color: '#812732' },
-  freeSub: { color: '#666', fontSize: 13 },
-
-  orderItem: {
+  orderCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f9f9f9',
     padding: 12,
-    borderRadius: 12,
+    borderRadius: 10,
     marginBottom: 12,
   },
-  qtyBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  qtyText: {
-    fontSize: 14,
-    color: '#812732',
-    marginRight: 6,
-  },
-  orderTitle: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#812732',
-  },
-  orderPrice: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 2,
-  },
-  orderImage: {
+  image: {
     width: 60,
     height: 60,
     borderRadius: 8,
+    marginRight: 12,
+  },
+  orderInfo: {
+    flex: 1,
+  },
+  orderNumber: {
+    fontWeight: 'bold',
+    color: '#812732',
+    fontSize: 16,
+  },
+  status: {
+    fontSize: 14,
+    marginTop: 4,
+  },
+  total: {
+    fontSize: 15,
+    color: '#000',
+    marginTop: 4,
   },
 });

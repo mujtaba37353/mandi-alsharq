@@ -12,92 +12,134 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 
-const BASE_URL = 'http://143.244.156.186:3007';
-
-const favorites = [
-  {
-    id: 1,
-    title: 'شاورما عربي علي الفحم',
-    image: require('../../assets/images/food1.png'),
-  },
-  {
-    id: 2,
-    title: 'وجبة دجاج مشوي',
-    image: require('../../assets/images/food2.png'),
-  },
-  {
-    id: 3,
-    title: 'شاورما عربي علي الفحم',
-    image: require('../../assets/images/food1.png'),
-  },
-  {
-    id: 4,
-    title: 'شاورما عربي علي الفحم',
-    image: require('../../assets/images/food1.png'),
-  },
-];
+const BASE_URL = 'https://cam4rent.net';
 
 export default function FavoriteScreen() {
   const router = useRouter();
   const [username, setUsername] = useState('...');
+  const [favorites, setFavorites] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const token = await AsyncStorage.getItem('token');
-        if (!token) return;
-
-        const res = await fetch(`${BASE_URL}/users/profile`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        const data = await res.json();
-
-        if (res.ok) {
-        const user = data.data;
-          setUsername(user.username);
-        } else {
-          console.log('Error fetching profile:', data.message);
-        }
-      } catch (err) {
-        console.error('Error:', err);
-      }
-    };
-
     fetchUser();
+    fetchFavorites();
   }, []);
+
+  const fetchUser = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      const res = await fetch(`${BASE_URL}/users/profile`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+      if (res.ok) setUsername(data.data.username);
+    } catch (err) {
+      console.error('Error fetching profile:', err);
+    }
+  };
+
+  const fetchFavorites = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${BASE_URL}/wishlist`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+      if (res.ok) setFavorites(data);
+    } catch (err) {
+      Alert.alert('خطأ', 'فشل تحميل المفضلة');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemoveFavorite = async (id: string) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${BASE_URL}/wishlist/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        setFavorites(prev => prev.filter(item => item.id !== id));
+      } else {
+        Alert.alert('خطأ', 'فشل حذف العنصر من المفضلة');
+      }
+    } catch (err) {
+      Alert.alert('خطأ', 'فشل الاتصال بالخادم');
+    }
+  };
+
+  const handleClearAll = async () => {
+    Alert.alert('تأكيد', 'هل أنت متأكد من أنك تريد حذف كل المفضلة؟', [
+      { text: 'إلغاء', style: 'cancel' },
+      {
+        text: 'نعم',
+        onPress: async () => {
+          try {
+            const token = await AsyncStorage.getItem('token');
+            const res = await fetch(`${BASE_URL}/wishlist`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${token}` },
+            });
+
+            if (res.ok) setFavorites([]);
+            else Alert.alert('خطأ', 'فشل حذف المفضلة');
+          } catch (err) {
+            Alert.alert('خطأ', 'فشل الاتصال بالخادم');
+          }
+        },
+      },
+    ]);
+  };
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      {/* Profile Card */}
       <TouchableOpacity
         style={styles.profileCard}
         onPress={() => router.push('/(tabs)/account')}
       >
-        <Image
-          source={require('../../assets/images/avatar.png')}
-          style={styles.avatar}
-        />
         <Text style={styles.name}>{username}</Text>
         <Ionicons name="arrow-forward" size={20} color="#812732" style={styles.arrow} />
       </TouchableOpacity>
 
-      {/* Title */}
       <View style={styles.headerRow}>
         <Text style={styles.title}>المفضلة لدي</Text>
+        {favorites.length > 0 && (
+          <TouchableOpacity onPress={handleClearAll}>
+            <Text style={{ color: '#812732', fontSize: 14 }}>مسح الكل</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* Favorite Items */}
-      <View style={styles.grid}>
-        {favorites.map((item) => (
-          <TouchableOpacity key={item.id} style={styles.card}>
-            <Image source={item.image} style={styles.image} />
-            <TouchableOpacity style={styles.heart}>
-              <Ionicons name="heart" size={20} color="#fff" />
+      {loading ? (
+        <Text style={{ textAlign: 'center', color: '#888' }}>جاري تحميل المفضلة...</Text>
+      ) : favorites.length === 0 ? (
+        <Text style={{ textAlign: 'center', color: '#888' }}>لا توجد منتجات في المفضلة</Text>
+      ) : (
+        <View style={styles.grid}>
+          {favorites.map((item) => (
+            <TouchableOpacity
+              key={item.id}
+              style={styles.card}
+              onPress={() => router.push(`/product/${item.product.id}`)}
+            >
+              <Image source={{ uri: item.product.imageUrl }} style={styles.image} />
+              <TouchableOpacity
+                style={styles.heart}
+                onPress={() => handleRemoveFavorite(item.id)}
+              >
+                <Ionicons name="heart" size={20} color="#fff" />
+              </TouchableOpacity>
             </TouchableOpacity>
-          </TouchableOpacity>
-        ))}
-      </View>
+          ))}
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -129,10 +171,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#812732',
-  },
-  seeAll: {
-    color: '#888',
-    fontSize: 14,
   },
   grid: {
     flexDirection: 'row',

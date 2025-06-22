@@ -17,7 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const BASE_URL = "http://143.244.156.186:3007";
+const BASE_URL = "https://cam4rent.net";
 
 const roleTranslation: Record<string, string> = {
   USER: "مستخدم",
@@ -47,11 +47,15 @@ export default function UsersScreen() {
     try {
       const token = await AsyncStorage.getItem("token");
       if (!token) return;
-
-      const response = await fetch(`${BASE_URL}/users`, {
+  
+      let endpoint = "/users";
+      if (currentUser?.role === "OWNER") endpoint = "/users/owner";
+      else if (currentUser?.role === "BRANCH_ADMIN") endpoint = "/users/branch";
+  
+      const response = await fetch(`${BASE_URL}${endpoint}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-
+  
       const data = await response.json();
       if (response.ok) {
         const filtered = data.filter((u: any) => u.role !== "OWNER");
@@ -64,6 +68,7 @@ export default function UsersScreen() {
       setLoading(false);
     }
   };
+  
 
   const fetchBranches = async () => {
     try {
@@ -101,12 +106,16 @@ export default function UsersScreen() {
     try {
       const token = await AsyncStorage.getItem("token");
       if (!token) return;
-
-      const res = await fetch(`${BASE_URL}/users/${id}`, {
+  
+      let endpoint = `/users/${id}`;
+      if (currentUser?.role === "OWNER") endpoint = `/users/owner/${id}`;
+      else if (currentUser?.role === "BRANCH_ADMIN") endpoint = `/users/branch/${id}`;
+  
+      const res = await fetch(`${BASE_URL}${endpoint}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-
+  
       if (res.ok) {
         Alert.alert("تم الحذف");
         fetchUsers();
@@ -117,6 +126,7 @@ export default function UsersScreen() {
       Alert.alert("خطأ", "تأكد من الاتصال");
     }
   };
+  
 
   const filteredUsers = () => {
     let filtered = [...users];
@@ -215,31 +225,35 @@ export default function UsersScreen() {
         data={filteredUsers()}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.userItem}
-            onPress={() => {
-              if (canEdit) router.push(`/admin/user-info/${item.id}`);
-            }}
-          >
-            <View>
-              <Text style={styles.username}>{item.username}</Text>
-              <Text style={styles.email}>{item.email}</Text>
-              <Text style={styles.role}>الدور: {roleTranslation[item.role]}</Text>
-              <Text style={styles.branch}>الفرع: {item.branch?.name || "غير محدد"}</Text>
-            </View>
-            {canEdit && (
-              <View style={styles.actions}>
-                <TouchableOpacity
-                  onPress={() => router.push(`/admin/edit-user/${item.id}`)}
-                >
-                  <Ionicons name="create-outline" size={22} color="#812732" />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleDeleteUser(item.id)}>
-                  <Ionicons name="trash-outline" size={22} color="red" />
-                </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.userItem}
+              onPress={() => {
+                if (currentUser?.role === "OWNER" || currentUser?.role === "BRANCH_ADMIN") {
+                  router.push(`/admin/user-info/${item.id}`);
+                }
+              }}
+            >
+              <View>
+                <Text style={styles.username}>{item.username}</Text>
+                <Text style={styles.email}>{item.email}</Text>
+                <Text style={styles.role}>الدور: {roleTranslation[item.role]}</Text>
+                <Text style={styles.branch}>الفرع: {item.branch?.name || "غير محدد"}</Text>
               </View>
-            )}
-          </TouchableOpacity>
+
+              {(currentUser?.role === "OWNER" || currentUser?.role === "BRANCH_ADMIN") && (
+                <View style={styles.actions}>
+                  <TouchableOpacity
+                    onPress={() => router.push(`/admin/edit-user/${item.id}`)}
+                  >
+                    <Ionicons name="create-outline" size={22} color="#812732" />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => handleDeleteUser(item.id)}>
+                    <Ionicons name="trash-outline" size={22} color="red" />
+                  </TouchableOpacity>
+                </View>
+              )}
+            </TouchableOpacity>
+
         )}
         refreshControl={
           <RefreshControl

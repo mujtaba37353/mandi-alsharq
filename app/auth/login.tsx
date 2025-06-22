@@ -25,7 +25,7 @@ export default function LoginScreen() {
     }
   
     try {
-      const response = await fetch('http://143.244.156.186:3007/auth/login', {
+      const response = await fetch('https://cam4rent.net/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -37,12 +37,11 @@ export default function LoginScreen() {
         await AsyncStorage.setItem('token', data.access_token);
   
         // 🛡️ جلب البروفايل باستخدام التوكن
-        const profileResponse = await fetch('http://143.244.156.186:3007/users/profile', {
+        const profileResponse = await fetch('https://cam4rent.net/users/profile', {
           headers: { Authorization: `Bearer ${data.access_token}` },
         });
   
         const profileData = await profileResponse.json();
-        console.log('📥 بيانات المستخدم:', profileData);
   
         if (profileResponse.ok && profileData.data && profileData.data.role) {
           const role = profileData.data.role;
@@ -50,7 +49,7 @@ export default function LoginScreen() {
   
           if (role === 'USER') {
             router.replace('/home');
-          } else if (role === 'ADMIN' || role === 'OWNER' || role === 'BRANCH_ADMIN' || role === 'CASHIER') {
+          } else if (role === 'ADMIN' || role === 'OWNER' || role === 'BRANCH_ADMIN' || role === 'CASHIER' || role === 'DELIVERY') {
             router.replace('/admin/(tabs)/main');
           } else {
             Alert.alert('خطأ', 'دور المستخدم غير معروف');

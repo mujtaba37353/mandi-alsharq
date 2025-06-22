@@ -1,26 +1,67 @@
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// بيانات وهمية لتجربة الصفحة
-const fakeProducts = {
-  p1: {
-    name: 'مندي دجاج',
-    price: 35,
-    discount: 5,
-    image: require('@/assets/images/food1.png'),
-    category: 'الأطباق الرئيسية',
-    specifications: [
-      { name: 'زيادة بهارات', price: 2 },
-      { name: 'جبن إضافي', price: 3, image: require('@/assets/images/food3.png') },
-    ],
-  },
-};
+const BASE_URL = 'https://cam4rent.net';
 
 export default function ProductDetails() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const product = fakeProducts[id as string];
+
+  const [product, setProduct] = useState(null);
+  const [role, setRole] = useState('');
+
+  useEffect(() => {
+    fetchProduct();
+    getRole();
+  }, [id]);
+
+  const getRole = async () => {
+    const storedRole = await AsyncStorage.getItem('role');
+    if (storedRole) setRole(storedRole);
+  };
+
+  const fetchProduct = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${BASE_URL}/products/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) setProduct(data);
+    } catch (err) {
+      console.error('فشل جلب المنتج', err);
+    }
+  };
+
+  const handleDelete = async () => {
+    Alert.alert('تأكيد الحذف', 'هل أنت متأكد أنك تريد حذف هذا المنتج؟', [
+      { text: 'إلغاء', style: 'cancel' },
+      {
+        text: 'حذف',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const token = await AsyncStorage.getItem('token');
+            const res = await fetch(`${BASE_URL}/products/${id}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+              router.replace('/admin/(tabs)/menus');
+            } else {
+              Alert.alert('فشل الحذف', 'حدث خطأ أثناء حذف المنتج');
+            }
+          } catch (err) {
+            console.error('خطأ في الحذف', err);
+            Alert.alert('خطأ', 'تعذر الاتصال بالخادم');
+          }
+        },
+      },
+    ]);
+  };
 
   if (!product) {
     return (
@@ -32,64 +73,95 @@ export default function ProductDetails() {
       </View>
     );
   }
-  
+
+  const arabic = product.translations?.find(t => t.language === 'AR');
+  const english = product.translations?.find(t => t.language === 'EN');
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* زر الرجوع */}
       <TouchableOpacity onPress={() => router.push(`/admin/(tabs)/menus`)} style={styles.backButton}>
         <Ionicons name="arrow-back" size={24} color="#812732" />
       </TouchableOpacity>
 
-      {/* صورة المنتج */}
-      <Image source={product.image} style={styles.image} />
+      {product.imageUrl && (
+        <Image
+          source={{
+            uri: product.imageUrl.startsWith('http') ? product.imageUrl : `${BASE_URL}${product.imageUrl}`,
+          }}
+          style={styles.image}
+        />
 
-      {/* معلومات المنتج */}
-      <Text style={styles.name}>{product.name}</Text>
-      <Text style={styles.price}>
-        {product.discount ? (
-          <>
-            <Text style={styles.oldPrice}>{product.price} ر.س</Text> {' '}
-            <Text style={styles.discountedPrice}>
-              {product.price - product.discount} ر.س
-            </Text>
-          </>
-        ) : (
-          `${product.price} ر.س`
-        )}
-      </Text>
-
-      {/* التصنيف */}
-      {product.category && (
-        <Text style={styles.category}>التصنيف: {product.category}</Text>
       )}
 
-      {/* المواصفات */}
-      {product.specifications?.length > 0 && (
+      <Text style={styles.name}>{arabic?.name || product.name}</Text>
+      <Text style={styles.description}>{arabic?.description || product.description}</Text>
+
+      {english && (
         <>
-          <Text style={styles.sectionHeader}>المواصفات</Text>
-          {product.specifications.map((spec, idx) => (
-            <View key={idx} style={styles.specItem}>
-              {spec.image && (
-                <Image source={spec.image} style={styles.specImage} />
-              )}
-              <View style={{ flex: 1 }}>
-                <Text style={styles.specName}>{spec.name}</Text>
-                {spec.price && <Text style={styles.specPrice}>+{spec.price} ر.س</Text>}
-              </View>
-            </View>
-          ))}
+          <Text style={styles.sectionTitle}>الاسم بالإنجليزية</Text>
+          <Text style={styles.name}>{english.name}</Text>
+          <Text style={styles.description}>{english.description}</Text>
         </>
       )}
 
-      {/* زر تعديل المنتج */}
-      <TouchableOpacity
-        style={styles.editButton}
-        onPress={() => router.push(`/admin/edit-product/${id}`)}
-      >
-        <Ionicons name="create-outline" size={22} color="#fff" />
-        <Text style={styles.editText}>تعديل المنتج</Text>
-      </TouchableOpacity>
+      <Text style={styles.price}>{product.discount ? (
+        <>
+          <Text style={styles.oldPrice}>{product.price} ر.س</Text>{' '}
+          <Text style={styles.discountedPrice}>{product.price - product.discount} ر.س</Text>
+        </>
+      ) : `${product.price} ر.س`}</Text>
+
+      {product.category?.name && (
+        <Text style={styles.category}>التصنيف: {product.category.name}</Text>
+      )}
+
+      {product.specifications?.length > 0 && (
+        <>
+          <Text style={styles.sectionTitle}>المواصفات</Text>
+          {product.specifications.map((spec, index) => {
+            const ar = spec.translations?.find(t => t.language === 'AR');
+            const en = spec.translations?.find(t => t.language === 'EN');
+            return (
+              <View key={index} style={styles.specItem}>
+                {spec.imageUrl && (
+                  <Image source={{ uri: `${BASE_URL}${spec.imageUrl}` }} style={styles.specImage} />
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.specName}>{ar?.name || spec.name}</Text>
+                  <Text style={styles.specDesc}>{ar?.description}</Text>
+                  {en && (
+                    <>
+                      <Text style={styles.specEN}>EN: {en.name}</Text>
+                      <Text style={styles.specEN}>{en.description}</Text>
+                    </>
+                  )}
+                  {spec.price && <Text style={styles.specPrice}>+{spec.price} ر.س</Text>}
+                </View>
+              </View>
+            );
+          })}
+        </>
+      )}
+
+      {(role === 'OWNER' || role === 'BRANCH_ADMIN') && (
+        <TouchableOpacity
+          style={styles.editButton}
+          onPress={() => router.push(`/admin/edit-product/${id}`)}
+        >
+          <Ionicons name="create-outline" size={22} color="#fff" />
+          <Text style={styles.editText}>تعديل المنتج</Text>
+        </TouchableOpacity>
+      )}
+
+      {role === 'BRANCH_ADMIN' && (
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={handleDelete}
+        >
+          <Ionicons name="trash-outline" size={22} color="#fff" />
+          <Text style={styles.editText}>حذف المنتج</Text>
+        </TouchableOpacity>
+      )}
     </ScrollView>
   );
 }
@@ -110,6 +182,12 @@ const styles = StyleSheet.create({
     color: '#812732',
     textAlign: 'center',
   },
+  description: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 5,
+  },
   price: {
     fontSize: 16,
     color: '#555',
@@ -129,7 +207,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     color: '#666',
   },
-  sectionHeader: {
+  sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#812732',
@@ -155,6 +233,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
   },
+  specDesc: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 2,
+  },
+  specEN: {
+    fontSize: 13,
+    color: '#888',
+    marginTop: 2,
+  },
   specPrice: {
     fontSize: 14,
     color: '#666',
@@ -165,6 +253,15 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 10,
     marginTop: 30,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteButton: {
+    backgroundColor: 'red',
+    padding: 14,
+    borderRadius: 10,
+    marginTop: 15,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
